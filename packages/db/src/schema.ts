@@ -145,6 +145,19 @@ export const jobs = sqliteTable('jobs', {
   index('jobs_novel').on(t.novelId),
 ]);
 
+export const jobEvents = sqliteTable('job_events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  jobId: text('job_id').notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  attempt: integer('attempt').notNull(),
+  level: text('level', { enum: ['info', 'error'] }).notNull(),
+  message: text('message').notNull(),
+  details: text('details'),
+  createdAt: integer('created_at').notNull(),
+}, (t) => [
+  index('job_events_job_id_id').on(t.jobId, t.id),
+  check('job_events_level', sql`${t.level} IN ('info', 'error')`),
+]);
+
 export const workerState = sqliteTable('worker_state', {
   id: integer('id').primaryKey().default(1),
   heartbeatAt: integer('heartbeat_at').notNull(),

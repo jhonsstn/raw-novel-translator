@@ -51,6 +51,11 @@ export function getProviderSettings(): ProviderSettingsView {
   return { baseUrl: value.base_url, model: value.model, revision: value.revision, timeoutSeconds: value.timeout_seconds, chunkCharacters: value.chunk_characters, automaticPaused: value.automatic_paused === 1, hasApiKey: value.encrypted_api_key !== null };
 }
 
+export function getStoredProviderApiKey(): string | null {
+  const encrypted = row().encrypted_api_key;
+  return encrypted === null ? null : decrypt(encrypted);
+}
+
 export function getProviderCredentials(): ProviderCredentials {
   const value = row();
   if (!value.base_url || !value.model || !value.encrypted_api_key) throw new AppError('PROVIDER_NOT_CONFIGURED', 'Configure the translation provider first', 409);

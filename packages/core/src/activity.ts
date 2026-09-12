@@ -1,5 +1,14 @@
 import { getDatabase } from '@novel/db';
 
+export interface JobEvent {
+  id: number; jobId: string; attempt: number; level: 'info' | 'error'; message: string; details: string | null; createdAt: number;
+}
+
+export function listJobEvents(jobId: string): JobEvent[] {
+  return getDatabase().sqlite.prepare(`SELECT id,job_id AS jobId,attempt,level,message,details,created_at AS createdAt
+    FROM (SELECT * FROM job_events WHERE job_id=? ORDER BY id DESC LIMIT 200) ORDER BY id`).all(jobId) as JobEvent[];
+}
+
 interface ActivityRow {
   id: string; kind: string; status: string; origin: string; attempt: number; progress: string | null; error: string | null;
   novel_id: string | null; chapter_id: string | null; created_at: number; updated_at: number; novel_title: string | null; chapter_title: string | null;

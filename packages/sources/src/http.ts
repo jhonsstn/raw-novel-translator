@@ -1,7 +1,7 @@
 import { lookup } from 'node:dns';
 import { isIP } from 'node:net';
 import iconv = require('iconv-lite');
-import { Agent, fetch } from 'undici';
+import { Agent, fetch, type Response } from 'undici';
 import { SourceError } from './types.js';
 
 const USER_AGENT = 'NovelLibrary/1.0';
@@ -22,7 +22,7 @@ export function isPublicAddress(input: string): boolean {
 
 const guardedAgent = new Agent({
   connect: {
-    lookup(hostname, _options, callback) {
+    lookup(hostname, options, callback) {
       lookup(hostname, { all: true, verbatim: true }, (error, addresses) => {
         if (error) { callback(error, ''); return; }
         const address = addresses.find((candidate) => isPublicAddress(candidate.address));
@@ -32,7 +32,8 @@ const guardedAgent = new Agent({
           callback(blocked, '');
           return;
         }
-        callback(null, address.address, address.family);
+        if (options.all) callback(null, addresses);
+        else callback(null, address.address, address.family);
       });
     },
   },
@@ -97,7 +98,12 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 async function rawFetch(url: URL, limit: number, signal: AbortSignal): Promise<{ bytes: Buffer; contentType: string | null; status: number; retryAfter: string | null }> {
   let current = url;
   for (let redirects = 0; redirects <= 3; redirects += 1) {
-    const response = await fetch(current, { dispatcher: guardedAgent, redirect: 'manual', signal, headers: { 'user-agent': USER_AGENT, accept: 'text/html,application/xhtml+xml' } });
+    let response: Response;
+    try {
+      response = await fetch(current, { dispatcher: guardedAgent, redirect: 'manual', signal, headers: { 'user-agent': USER_AGENT, accept: 'text/html,application/xhtml+xml' } });
+    } catch (cause) {
+      throw new Error(`GET ${current.origin}${current.pathname} failed`, { cause });
+    }
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('location');
       if (!location || redirects === 3) throw new SourceError('SOURCE_REDIRECT', 'Source redirect was invalid or exceeded the limit');
@@ -109,7 +115,14 @@ async function rawFetch(url: URL, limit: number, signal: AbortSignal): Promise<{
     if (!response.body) throw new SourceError('SOURCE_NETWORK', 'Source response has no body');
     // undici and DOM ship structurally equivalent ReadableStream types with incompatible declarations.
     const stream = response.body as unknown as ReadableStream<Uint8Array>;
-    return { bytes: await bodyBytes(stream, limit), contentType: response.headers.get('content-type'), status: response.status, retryAfter: response.headers.get('retry-after') };
+    let bytes: Buffer;
+    try {
+      bytes = await bodyBytes(stream, limit);
+    } catch (cause) {
+      if (cause instanceof SourceError) throw cause;
+      throw new Error(`Reading GET ${current.origin}${current.pathname} response failed (HTTP ${response.status})`, { cause });
+    }
+    return { bytes, contentType: response.headers.get('content-type'), status: response.status, retryAfter: response.headers.get('retry-after') };
   }
   throw new SourceError('SOURCE_REDIRECT', 'Source redirect exceeded the limit');
 }

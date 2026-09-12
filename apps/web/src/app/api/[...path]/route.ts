@@ -9,6 +9,7 @@ import {
   getProviderSettings,
   getWorkerHealth,
   listActivity,
+  listJobEvents,
   listJobs,
   listNovels,
   listSourceSettings,
@@ -176,6 +177,10 @@ async function dispatch(request: Request, context: RouteContext): Promise<Respon
     const job = getJob(path[1]!);
     if (!job) throw new AppError('JOB_NOT_FOUND', 'Job not found', 404);
     return json(job);
+  }
+  if (method === 'GET' && path[0] === 'jobs' && path.length === 3 && path[2] === 'events') {
+    if (!getJob(path[1]!)) throw new AppError('JOB_NOT_FOUND', 'Job not found', 404);
+    return json(listJobEvents(path[1]!));
   }
   if (method === 'POST' && path[0] === 'jobs' && path.length === 3 && path[2] === 'retry') return jobResponse(retryJob(path[1]!));
   if (method === 'POST' && path[0] === 'jobs' && path.length === 3 && path[2] === 'cancel') return json({ cancelled: cancelJob(path[1]!) });

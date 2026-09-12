@@ -75,9 +75,27 @@ body:has(.reader-focus) .sidebar,body:has(.reader-focus) .mobilebar { display:no
 body:has(.reader-focus) .app-shell { margin-left:0; }
 body:has(.reader-focus) main { padding-top:0; }
 .reader-focus .reader-head { top:0; }
-.activity-row { display:grid; grid-template-columns:140px 1fr 110px; gap:16px; padding:15px 0; border-bottom:1px solid var(--line); align-items:center; }
+.activity-row { display:grid; grid-template-columns:140px minmax(0,1fr) 160px; gap:16px; padding:15px 0; border-bottom:1px solid var(--line); align-items:center; }
 .job-status { font-weight:800; font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
 .job-status.succeeded { color:var(--green); }.job-status.failed { color:#a52f23; }.job-status.running { color:#9a6508; }
+.activity-row > * { min-width:0; overflow-wrap:anywhere; }
+.activity-actions { justify-content:flex-end; }
+.activity-actions .btn:disabled,.activity-details .btn:disabled { cursor:wait; opacity:.6; }
+.activity-notice { margin-bottom:18px; }
+.activity-details,.activity-action-error { grid-column:1/-1; }
+.activity-details { padding:16px; border:1px solid var(--line); border-radius:10px; background:var(--paper); }
+.activity-metadata { display:flex; flex-wrap:wrap; gap:14px 28px; margin:0 0 20px; }
+.activity-metadata > div { min-width:0; }
+.activity-metadata dt { font-size:12px; font-weight:700; color:var(--muted); }
+.activity-metadata dd { margin:4px 0 0; }
+.activity-events { list-style:none; margin:14px 0 0; padding:0; max-height:480px; overflow:auto; overscroll-behavior:contain; }
+.activity-event { padding:12px; border-left:3px solid var(--line); background:var(--card); }
+.activity-event + .activity-event { margin-top:10px; }
+.activity-event-error { border-left-color:var(--accent); }
+.activity-event .toolbar { font-size:12px; }
+.activity-log { margin:8px 0 0; white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; font-size:12px; line-height:1.6; user-select:text; }
+.activity-details .error { margin-top:12px; }
+.activity-details .error .btn { margin:8px; }
 .dialog-backdrop { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:20px; background:#211c17aa; }
 .dialog { width:min(560px,100%); max-height:90vh; overflow:auto; background:var(--card); border-radius:18px; padding:25px; box-shadow:0 30px 100px #0005; }
 .toggle { display:flex; justify-content:space-between; gap:24px; align-items:center; border-top:1px solid var(--line); padding:15px 0; }

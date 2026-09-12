@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { getDatabase } from '@novel/db';
-import { AppError, sanitizedError } from './errors.js';
+import { AppError, errorDiagnostics, sanitizedDiagnosticText, sanitizedError } from './errors.js';
 
 export type JobKind = 'import' | 'check_updates' | 'fetch_chapter' | 'translate_chapter' | 'source_check' | 'provider_check';
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
@@ -77,6 +77,9 @@ export function claimJob(lane: 'source' | 'translation', now: number): Job | nul
     const token = randomUUID();
     const changed = sqlite.prepare("UPDATE jobs SET status='running', attempt=attempt+1, lease_token=?, lease_expires_at=?, updated_at=? WHERE id=? AND status='queued'").run(token, now + 90_000, now, candidate.id);
     if (changed.changes !== 1) return null;
+    if (typeof candidate.payload.sourceId === 'string') {
+      recordJobEvent(candidate.id, token, 'Source selected', `Source: ${candidate.payload.sourceId}`);
+    }
     return getJob(candidate.id);
   })();
 }
@@ -87,6 +90,13 @@ export function heartbeatJob(id: string, token: string, now = Date.now()): boole
 
 export function updateJobProgress(id: string, token: string, progress: Record<string, unknown>): boolean {
   return getDatabase().sqlite.prepare("UPDATE jobs SET progress=?, updated_at=? WHERE id=? AND status='running' AND lease_token=?").run(JSON.stringify(progress), Date.now(), id, token).changes === 1;
+}
+
+/** Context must be explicitly selected by callers, not serialized payloads or requests. */
+export function recordJobEvent(jobId: string, token: string, message: string, details?: string): boolean {
+  return getDatabase().sqlite.prepare(`INSERT INTO job_events(job_id,attempt,level,message,details,created_at)
+    SELECT id,attempt,'info',?,?,? FROM jobs WHERE id=? AND status='running' AND lease_token=?`)
+    .run(sanitizedDiagnosticText(message, 1000), details === undefined ? null : sanitizedDiagnosticText(details), Date.now(), jobId, token).changes === 1;
 }
 
 export function finishJob(id: string, token: string, progress?: Record<string, unknown>): boolean {
@@ -111,7 +121,16 @@ export function finalizeParentJob(id: string): void {
 }
 
 export function failJob(id: string, token: string, error: unknown): boolean {
-  return getDatabase().sqlite.prepare("UPDATE jobs SET status='failed', error=?, lease_token=NULL, lease_expires_at=NULL, updated_at=? WHERE id=? AND status='running' AND lease_token=?").run(sanitizedError(error), Date.now(), id, token).changes === 1;
+  const sqlite = getDatabase().sqlite;
+  return sqlite.transaction(() => {
+    const now = Date.now();
+    const summary = sanitizedError(error);
+    const changed = sqlite.prepare("UPDATE jobs SET status='failed', error=?, lease_token=NULL, lease_expires_at=NULL, updated_at=? WHERE id=? AND status='running' AND lease_token=?").run(summary, now, id, token).changes === 1;
+    if (!changed) return false;
+    sqlite.prepare(`INSERT INTO job_events(job_id,attempt,level,message,details,created_at)
+      SELECT id,attempt,'error',?,?,? FROM jobs WHERE id=?`).run(summary, errorDiagnostics(error), now, id);
+    return true;
+  })();
 }
 
 export function cancelJob(id: string): boolean {
@@ -124,9 +143,17 @@ export function cancelJob(id: string): boolean {
 }
 
 export function retryJob(id: string): Job {
-  const original = getJob(id);
-  if (!original || original.status !== 'failed') throw new AppError('NOT_RETRYABLE', 'Only failed jobs can be retried', 409);
-  return enqueueJob({ kind: original.kind, payload: original.payload, dedupeKey: original.dedupeKey, origin: 'manual', parentJobId: original.parentJobId, novelId: original.novelId, chapterId: original.chapterId });
+  const sqlite = getDatabase().sqlite;
+  return sqlite.transaction(() => {
+    const original = getJob(id);
+    if (!original || original.status !== 'failed') throw new AppError('NOT_RETRYABLE', 'Only failed jobs can be retried', 409);
+    const retried = enqueueJob({ kind: original.kind, payload: original.payload, dedupeKey: original.dedupeKey, origin: 'manual', parentJobId: original.parentJobId, novelId: original.novelId, chapterId: original.chapterId });
+    const insert = sqlite.prepare("INSERT INTO job_events(job_id,attempt,level,message,details,created_at) VALUES (?,?,'info',?,?,?)");
+    const now = Date.now();
+    insert.run(original.id, original.attempt, 'Retry requested', `Retry job: ${retried.id}`, now);
+    insert.run(retried.id, retried.attempt, 'Retry of failed job', `Previous job: ${original.id}`, now);
+    return retried;
+  })();
 }
 
 export function listJobs(page = 1, filter: 'active' | 'failed' | 'all' = 'all'): { items: Job[]; total: number } {
