@@ -1,0 +1,8 @@
+.git
+**/node_modules
+**/dist
+**/.next
+**/*.tsbuildinfo
+*.sqlite
+*.sqlite-*
+.env*

@@ -1,0 +1,45 @@
+services:
+  migrate:
+    build:
+      context: .
+      target: migrate
+    environment: &app-env
+      DATABASE_PATH: /data/library.sqlite
+      APP_SECRET_KEY: ${APP_SECRET_KEY:?Set APP_SECRET_KEY to a base64-encoded 32-byte key}
+    volumes: &app-volumes
+      - novel-data:/data
+    restart: "no"
+
+  web:
+    build:
+      context: .
+      target: web
+    environment:
+      <<: *app-env
+      APP_ORIGIN: ${APP_ORIGIN:-http://127.0.0.1:3000}
+    volumes: *app-volumes
+    ports:
+      - "127.0.0.1:${PORT:-3000}:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>r.ok?r.json():Promise.reject()).then(v=>{if(!v.healthy)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    build:
+      context: .
+      target: worker
+    environment: *app-env
+    volumes: *app-volumes
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  novel-data:

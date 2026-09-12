@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.next/
+coverage/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.env
+.env.local
+playwright-report/
+test-results/
