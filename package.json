@@ -6,10 +6,10 @@
   "scripts": {
     "build:packages": "pnpm --filter @novel/db build && pnpm --filter @novel/sources build && pnpm --filter @novel/translation build && pnpm --filter @novel/core build",
     "build": "pnpm build:packages && pnpm --filter @novel/web build && pnpm --filter @novel/worker build",
-    "dev": "pnpm build:packages && concurrently -k -n db,sources,translation,core,web,worker \"pnpm --filter @novel/db dev\" \"pnpm --filter @novel/sources dev\" \"pnpm --filter @novel/translation dev\" \"pnpm --filter @novel/core dev\" \"pnpm --filter @novel/web dev\" \"pnpm --filter @novel/worker dev\"",
+    "dev": "pnpm build:packages && node --env-file-if-exists=.env node_modules/concurrently/dist/bin/concurrently.js -k -n db,sources,translation,core,web,worker \"pnpm --filter @novel/db dev\" \"pnpm --filter @novel/sources dev\" \"pnpm --filter @novel/translation dev\" \"pnpm --filter @novel/core dev\" \"pnpm --filter @novel/web dev\" \"pnpm --filter @novel/worker dev\"",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm build:packages && vitest run",
-    "db:migrate": "pnpm build:packages && node packages/db/dist/migrate.js"
+    "db:migrate": "pnpm build:packages && node --env-file-if-exists=.env packages/db/dist/migrate.js"
   },
   "devDependencies": {
     "@types/node": "24.10.1",
