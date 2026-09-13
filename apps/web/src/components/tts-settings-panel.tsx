@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 interface TtsSettings {
   baseUrl: string | null;
   model: string | null;
+  language: string | null;
   voice: string;
   speed: number;
   pitch: number;
@@ -13,21 +14,21 @@ interface TtsSettings {
   hasApiKey: boolean;
 }
 
-const voices = [
-  'alloy',
-  'ash',
-  'ballad',
-  'coral',
-  'echo',
-  'fable',
-  'onyx',
-  'nova',
-  'sage',
-  'shimmer',
-  'verse',
-  'marin',
-  'cedar',
-];
+interface TtsModelOption {
+  id: string;
+  label: string;
+}
+interface TtsVoiceOption {
+  id: string;
+  label: string;
+  language: string | null;
+  locale: string | null;
+  gender: string | null;
+}
+interface TtsCatalog {
+  models: TtsModelOption[];
+  voices: TtsVoiceOption[];
+}
 const inputClass =
   'w-full rounded-[10px] border border-line bg-card px-[13px] py-[11px] text-ink outline-none transition-[border-color,box-shadow,background-color] duration-150 placeholder:text-muted/70 hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-accent)_18%,transparent)]';
 const panelClass = 'rounded-[15px] border border-line bg-card p-[22px] text-ink shadow-card max-[760px]:p-[17px]';
@@ -51,8 +52,17 @@ function apiError(value: unknown, fallback: string): string {
     : fallback;
 }
 
+function isTtsCatalog(value: unknown): value is TtsCatalog {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  return Array.isArray(record.models) && Array.isArray(record.voices);
+}
+
 export function TtsSettingsPanel() {
   const [settings, setSettings] = useState<TtsSettings | null>(null);
+  const [catalog, setCatalog] = useState<TtsCatalog>({ models: [], voices: [] });
+  const [availableLanguages, setAvailableLanguages] = useState<string[]>([]);
+  const [language, setLanguage] = useState('all');
   const [apiKey, setApiKey] = useState('');
   const [autoNext, setAutoNext] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -62,14 +72,50 @@ export function TtsSettingsPanel() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
 
+  async function loadCatalog() {
+    const response = await fetch('/api/settings/tts/catalog', { cache: 'no-store' });
+    const value: unknown = await response.json();
+    if (response.ok && isTtsCatalog(value)) {
+      setCatalog(value);
+      setAvailableLanguages(
+        Array.from(
+          new Set(
+            value.voices.flatMap((voice) =>
+              [voice.locale, voice.language].filter((item): item is string => Boolean(item)),
+            ),
+          ),
+        ).sort(),
+      );
+    }
+  }
+
+  async function loadVoices(selectedLanguage: string): Promise<TtsVoiceOption[]> {
+    if (selectedLanguage === 'all') {
+      await loadCatalog();
+      return [];
+    }
+    const response = await fetch(`/api/settings/tts/catalog?language=${encodeURIComponent(selectedLanguage)}`, {
+      cache: 'no-store',
+    });
+    const value: unknown = await response.json();
+    if (response.ok && isTtsCatalog(value)) {
+      setCatalog((current) => ({ ...current, voices: value.voices }));
+      return value.voices;
+    }
+    return [];
+  }
+
   useEffect(() => {
     setAutoNext(localStorage.getItem('reader-tts-auto-next') !== 'false');
     void (async () => {
       const response = await fetch('/api/settings/tts', { cache: 'no-store' });
       const value: unknown = await response.json();
-      if (response.ok && isTtsSettings(value)) setSettings(value);
-      else setError(apiError(value, 'Could not load TTS settings.'));
+      if (response.ok && isTtsSettings(value)) {
+        setSettings(value);
+        setLanguage(value.language ?? 'all');
+      } else setError(apiError(value, 'Could not load TTS settings.'));
     })();
+    void loadCatalog();
     return () => {
       audioRef.current?.pause();
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
@@ -88,6 +134,7 @@ export function TtsSettingsPanel() {
       body: JSON.stringify({
         baseUrl: settings.baseUrl,
         model: settings.model,
+        language: language === 'all' ? null : language,
         voice: settings.voice,
         speed: settings.speed,
         pitch: settings.pitch,
@@ -99,6 +146,7 @@ export function TtsSettingsPanel() {
     if (response.ok && isTtsSettings(value)) {
       setSettings(value);
       setApiKey('');
+      void loadCatalog();
       setMessage('TTS provider settings saved.');
     } else setError(apiError(value, 'Could not save TTS settings.'));
     setSaving(false);
@@ -142,6 +190,18 @@ export function TtsSettingsPanel() {
     );
 
   const configured = Boolean(settings.baseUrl && settings.model && settings.hasApiKey);
+  const visibleVoices = catalog.voices;
+  const voiceOptions = visibleVoices.some((voice) => voice.id === settings.voice)
+    ? visibleVoices
+    : [
+        { id: settings.voice, label: `${settings.voice} (saved)`, language: null, locale: null, gender: null },
+        ...visibleVoices,
+      ];
+  const modelOptions = catalog.models.some((model) => model.id === settings.model)
+    ? catalog.models
+    : settings.model
+      ? [{ id: settings.model, label: `${settings.model} (saved)` }, ...catalog.models]
+      : catalog.models;
   return (
     <div className="grid gap-4">
       {message && (
@@ -192,13 +252,19 @@ export function TtsSettingsPanel() {
           </label>
           <label className={fieldClass}>
             Model
-            <input
+            <select
               className={inputClass}
               required
-              placeholder="gpt-4o-mini-tts"
               value={settings.model ?? ''}
               onChange={(event) => setSettings({ ...settings, model: event.target.value })}
-            />
+            >
+              <option value="">Select a model</option>
+              {modelOptions.map((model) => (
+                <option value={model.id} key={model.id}>
+                  {model.label}
+                </option>
+              ))}
+            </select>
           </label>
           <label className={fieldClass}>
             API key
@@ -211,19 +277,42 @@ export function TtsSettingsPanel() {
             />
           </label>
           <label className={fieldClass}>
-            Voice
-            <input
+            Language / locale
+            <select
               className={inputClass}
-              list="tts-voice-options"
+              value={language}
+              onChange={(event) => {
+                const selectedLanguage = event.target.value;
+                setLanguage(selectedLanguage);
+                void loadVoices(selectedLanguage).then((voices) => {
+                  const firstVoice = voices[0];
+                  if (firstVoice) setSettings((current) => (current ? { ...current, voice: firstVoice.id } : current));
+                });
+              }}
+            >
+              <option value="all">All languages</option>
+              {availableLanguages.map((value) => (
+                <option value={value} key={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={fieldClass}>
+            Voice
+            <select
+              className={inputClass}
               required
               value={settings.voice}
               onChange={(event) => setSettings({ ...settings, voice: event.target.value })}
-            />
-            <datalist id="tts-voice-options">
-              {voices.map((voice) => (
-                <option value={voice} key={voice} />
+            >
+              {voiceOptions.map((voice) => (
+                <option value={voice.id} key={voice.id}>
+                  {voice.label}
+                  {voice.locale ? ` (${voice.locale})` : ''}
+                </option>
               ))}
-            </datalist>
+            </select>
           </label>
           <label className={fieldClass}>
             Timeout (seconds)

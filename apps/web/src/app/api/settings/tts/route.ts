@@ -9,6 +9,7 @@ const schema = z
   .object({
     baseUrl: z.string().url().nullable().optional(),
     model: z.string().trim().max(200).nullable().optional(),
+    language: z.string().trim().max(100).nullable().optional(),
     apiKey: z.string().max(1000).optional(),
     clearApiKey: z.boolean().optional(),
     voice: z.string().trim().min(1).max(100).optional(),

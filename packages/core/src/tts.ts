@@ -6,6 +6,7 @@ import { AppError } from './errors.js';
 export interface TtsSettingsView {
   baseUrl: string | null;
   model: string | null;
+  language: string | null;
   voice: string;
   speed: number;
   pitch: number;
@@ -21,9 +22,28 @@ export interface TtsCredentials extends TtsSettingsView {
   hasApiKey: true;
 }
 
+export interface TtsModelOption {
+  id: string;
+  label: string;
+}
+
+export interface TtsVoiceOption {
+  id: string;
+  label: string;
+  language: string | null;
+  locale: string | null;
+  gender: string | null;
+}
+
+export interface TtsCatalog {
+  models: TtsModelOption[];
+  voices: TtsVoiceOption[];
+}
+
 export interface UpdateTtsSettingsInput {
   baseUrl?: string | null | undefined;
   model?: string | null | undefined;
+  language?: string | null | undefined;
   apiKey?: string | undefined;
   clearApiKey?: boolean | undefined;
   voice?: string | undefined;
@@ -36,6 +56,7 @@ interface TtsRow {
   base_url: string | null;
   model: string | null;
   encrypted_api_key: string | null;
+  language: string | null;
   voice: string;
   speed: number;
   pitch: number;
@@ -90,11 +111,93 @@ function validateBaseUrl(input: string): string {
   return url.href.replace(/\/$/, '');
 }
 
+function stringField(value: Record<string, unknown>, ...keys: string[]): string | null {
+  for (const key of keys) {
+    const candidate = value[key];
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+  }
+  return null;
+}
+
+function listFromResponse(value: unknown, keys: string[]): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== 'object') return [];
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    const candidate = record[key];
+    if (Array.isArray(candidate)) return candidate;
+  }
+  return [];
+}
+
+function modelOptions(value: unknown): TtsModelOption[] {
+  const options: TtsModelOption[] = [];
+  for (const item of listFromResponse(value, ['data', 'models'])) {
+    if (typeof item === 'string') options.push({ id: item, label: item });
+    else if (item && typeof item === 'object') {
+      const record = item as Record<string, unknown>;
+      const id = stringField(record, 'id', 'name', 'model');
+      if (id) options.push({ id, label: stringField(record, 'name', 'label') ?? id });
+    }
+  }
+  return Array.from(new Map(options.map((option) => [option.id, option])).values());
+}
+
+function voiceOptions(value: unknown): TtsVoiceOption[] {
+  const options: TtsVoiceOption[] = [];
+  for (const item of listFromResponse(value, ['data', 'voices'])) {
+    if (typeof item === 'string') options.push({ id: item, label: item, language: null, locale: null, gender: null });
+    else if (item && typeof item === 'object') {
+      const record = item as Record<string, unknown>;
+      const id = stringField(record, 'id', 'shortName', 'ShortName', 'name', 'Name');
+      if (!id) continue;
+      options.push({
+        id,
+        label: stringField(record, 'friendlyName', 'FriendlyName', 'name', 'Name', 'id') ?? id,
+        language: stringField(record, 'language', 'Language'),
+        locale: stringField(record, 'locale', 'Locale'),
+        gender: stringField(record, 'gender', 'Gender'),
+      });
+    }
+  }
+  return Array.from(new Map(options.map((option) => [option.id, option])).values());
+}
+
+async function catalogRequest(
+  credentials: TtsCredentials,
+  resource: string,
+  body?: Record<string, string>,
+): Promise<unknown> {
+  const target = `${credentials.baseUrl.replace(/\/$/, '')}/${resource}`;
+  const response = await fetch(target, {
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${credentials.apiKey}`,
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(body ? { method: 'POST', body: JSON.stringify(body) } : {}),
+    signal: AbortSignal.timeout(credentials.timeoutSeconds * 1000),
+  });
+  if (!response.ok) throw new AppError('TTS_CATALOG_FAILED', `TTS provider returned ${response.status} for /${resource}`, 502);
+  return response.json();
+}
+
+export async function getTtsCatalog(language?: string): Promise<TtsCatalog> {
+  const credentials = getTtsCredentials();
+  const voices = language
+    ? await catalogRequest(credentials, 'voices', { language })
+    : await catalogRequest(credentials, 'voices/all');
+  if (language) return { models: [], voices: voiceOptions(voices) };
+  const models = await catalogRequest(credentials, 'models');
+  return { models: modelOptions(models), voices: voiceOptions(voices) };
+}
+
 export function getTtsSettings(): TtsSettingsView {
   const value = row();
   return {
     baseUrl: value.base_url,
     model: value.model,
+    language: value.language,
     voice: value.voice,
     speed: value.speed,
     pitch: value.pitch,
@@ -124,6 +227,7 @@ export function updateTtsSettings(input: UpdateTtsSettingsInput): TtsSettingsVie
   const baseUrl =
     input.baseUrl === undefined ? current.base_url : input.baseUrl ? validateBaseUrl(input.baseUrl) : null;
   const model = input.model === undefined ? current.model : input.model?.trim() || null;
+  const language = input.language === undefined ? current.language : input.language?.trim() || null;
   const voice = input.voice === undefined ? current.voice : input.voice.trim();
   const speed = input.speed ?? current.speed;
   const pitch = input.pitch ?? current.pitch;
@@ -142,9 +246,9 @@ export function updateTtsSettings(input: UpdateTtsSettingsInput): TtsSettingsVie
       : current.encrypted_api_key;
   getDatabase()
     .sqlite.prepare(
-      'UPDATE tts_settings SET base_url=?,model=?,encrypted_api_key=?,voice=?,speed=?,pitch=?,timeout_seconds=?,revision=revision+1 WHERE id=1',
+      'UPDATE tts_settings SET base_url=?,model=?,encrypted_api_key=?,language=?,voice=?,speed=?,pitch=?,timeout_seconds=?,revision=revision+1 WHERE id=1',
     )
-    .run(baseUrl, model, encrypted, voice, speed, pitch, timeout);
+    .run(baseUrl, model, encrypted, language, voice, speed, pitch, timeout);
   return getTtsSettings();
 }
 

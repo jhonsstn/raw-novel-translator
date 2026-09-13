@@ -1,0 +1,1 @@
+ALTER TABLE tts_settings ADD COLUMN language TEXT;

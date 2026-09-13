@@ -194,6 +194,7 @@ export const ttsSettings = sqliteTable(
     baseUrl: text('base_url'),
     model: text('model'),
     encryptedApiKey: text('encrypted_api_key'),
+    language: text('language'),
     voice: text('voice').notNull().default('alloy'),
     speed: real('speed').notNull().default(1),
     pitch: integer('pitch').notNull().default(0),
