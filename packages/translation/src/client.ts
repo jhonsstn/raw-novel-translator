@@ -71,7 +71,7 @@ const guardedAgent = new Agent({
   },
 });
 
-function providerFetch(baseUrl: string): typeof globalThis.fetch {
+export function providerFetch(baseUrl: string): typeof globalThis.fetch {
   const expected = new URL(baseUrl);
   const privateOrigins = (process.env.AI_ALLOWED_PRIVATE_ORIGINS ?? '')
     .split(',')
