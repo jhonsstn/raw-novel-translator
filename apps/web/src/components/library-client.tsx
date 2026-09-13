@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { BookPlus, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import Image from 'next/image';
 
 interface Novel {
   id: string;
@@ -158,7 +159,7 @@ export function LibraryClient() {
             >
               <div className="relative grid aspect-2/3 place-items-center overflow-hidden bg-cover-art text-white after:pointer-events-none after:absolute after:inset-0 after:bg-cover-overlay">
                 {novel.coverUrl && (
-                  <img
+                  <Image
                     className="absolute inset-0 z-10 size-full bg-paper-raised object-contain"
                     src={novel.coverUrl}
                     alt=""
