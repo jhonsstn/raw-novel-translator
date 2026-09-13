@@ -9,3 +9,4 @@ export * from './novel-metadata.js';
 export * from './settings.js';
 export * from './source-definitions.js';
 export * from './translations.js';
+export * from './tts.js';
