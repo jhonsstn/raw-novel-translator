@@ -179,12 +179,14 @@ export const providerSettings = sqliteTable(
     revision: integer('revision').notNull().default(1),
     timeoutSeconds: integer('timeout_seconds').notNull().default(120),
     chunkCharacters: integer('chunk_characters').notNull().default(10000),
+    translationConcurrency: integer('translation_concurrency').notNull().default(1),
     automaticPaused: integer('automatic_paused', { mode: 'boolean' }).notNull().default(false),
   },
   (t) => [
     check('provider_singleton', sql`${t.id} = 1`),
     check('provider_timeout_range', sql`${t.timeoutSeconds} BETWEEN 30 AND 600`),
     check('provider_chunk_range', sql`${t.chunkCharacters} BETWEEN 500 AND 15000`),
+    check('provider_translation_concurrency_range', sql`${t.translationConcurrency} BETWEEN 1 AND 20`),
   ],
 );
 

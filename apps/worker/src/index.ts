@@ -5,6 +5,7 @@ import {
   failJob,
   finalizeParentJob,
   finishJob,
+  getProviderSettings,
   handleCheckUpdatesJob,
   handleFetchChapterJob,
   handleImportJob,
@@ -62,12 +63,33 @@ async function runJob(job: Job): Promise<void> {
   }
 }
 
-async function laneLoop(lane: 'source' | 'translation'): Promise<void> {
+async function sourceLaneLoop(): Promise<void> {
   while (!shutdown.signal.aborted) {
-    const job = claimJob(lane, Date.now());
+    const job = claimJob('source', Date.now());
     if (job) await runJob(job);
     else await sleep(300);
   }
+}
+
+async function translationLaneLoop(): Promise<void> {
+  const running = new Set<Promise<void>>();
+  const start = (job: Job) => {
+    let task: Promise<void>;
+    task = runJob(job).finally(() => running.delete(task));
+    running.add(task);
+  };
+  while (!shutdown.signal.aborted) {
+    const limit = getProviderSettings().translationConcurrency;
+    while (!shutdown.signal.aborted && running.size < limit) {
+      const job = claimJob('translation', Date.now());
+      if (!job) break;
+      start(job);
+    }
+    if (shutdown.signal.aborted) break;
+    if (running.size === 0) await sleep(300);
+    else await Promise.race([sleep(100), ...running]);
+  }
+  await Promise.allSettled(running);
 }
 
 function recordHeartbeat(): void {
@@ -101,7 +123,7 @@ async function main(): Promise<void> {
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
   console.log('Worker ready');
-  await Promise.all([laneLoop('source'), laneLoop('translation')]);
+  await Promise.all([sourceLaneLoop(), translationLaneLoop()]);
   clearInterval(heartbeat);
   clearInterval(scheduler);
 }
