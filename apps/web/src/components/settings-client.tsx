@@ -8,6 +8,7 @@ interface Provider {
   model: string | null;
   timeoutSeconds: number;
   chunkCharacters: number;
+  translationConcurrency: number;
   automaticPaused: boolean;
   hasApiKey: boolean;
 }
@@ -48,7 +49,13 @@ interface Novel {
 }
 type Tab = 'General' | 'Provider' | 'Sources' | 'Automation' | 'Reader';
 function isProvider(value: unknown): value is Provider {
-  return !!value && typeof value === 'object' && 'timeoutSeconds' in value && 'automaticPaused' in value;
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'timeoutSeconds' in value &&
+    'translationConcurrency' in value &&
+    'automaticPaused' in value
+  );
 }
 function isSources(value: unknown): value is Source[] {
   return (
@@ -186,6 +193,14 @@ export function SettingsClient() {
       setError('Chunk characters must be a whole number between 500 and 15,000.');
       return;
     }
+    if (
+      !Number.isSafeInteger(provider.translationConcurrency) ||
+      provider.translationConcurrency < 1 ||
+      provider.translationConcurrency > 20
+    ) {
+      setError('Parallel translations must be a whole number between 1 and 20.');
+      return;
+    }
     const response = await fetch('/api/settings/provider', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -194,6 +209,7 @@ export function SettingsClient() {
         model: provider.model,
         timeoutSeconds: provider.timeoutSeconds,
         chunkCharacters: chunkSize,
+        translationConcurrency: provider.translationConcurrency,
         ...(apiKey ? { apiKey } : {}),
       }),
     });
@@ -202,8 +218,8 @@ export function SettingsClient() {
       setProvider(value);
       setChunkCharacters(String(value.chunkCharacters));
       setApiKey('');
-      setMessage('Provider settings saved.');
-    } else setError('Save failed');
+      setMessage('Provider settings saved. Parallel translation changes apply to the running worker automatically.');
+    } else setError(apiError(value, 'Save failed'));
   }
   function testProvider() {
     return startJob('provider-test', '/api/settings/provider/test');
@@ -389,7 +405,10 @@ export function SettingsClient() {
       )}
       {tab === 'Provider' && (
         <form className={`${panelClass} grid gap-4`} onSubmit={saveProvider}>
-          <h2>Translation provider</h2>
+          <div>
+            <h2>Translation provider</h2>
+            <p className="mt-1 text-sm text-muted">Configure generation limits and how many chapters may translate at the same time.</p>
+          </div>
           <div className="grid grid-cols-2 gap-3.5 max-[760px]:grid-cols-1">
             <label className={fieldClass}>
               OpenAI-compatible base URL
@@ -445,6 +464,22 @@ export function SettingsClient() {
                   if (/^[0-9]*$/.test(value)) setChunkCharacters(value);
                 }}
               />
+            </label>
+            <label className={fieldClass}>
+              Parallel translations
+              <input
+                className={inputClass}
+                type="number"
+                min="1"
+                max="20"
+                step="1"
+                required
+                value={provider.translationConcurrency}
+                onChange={(event) => setProvider({ ...provider, translationConcurrency: Number(event.target.value) })}
+              />
+              <span className="font-normal leading-relaxed text-muted">
+                Maximum chapter translations running at once. Default is 1; changes apply without restarting the worker.
+              </span>
             </label>
           </div>
           <div className="flex flex-wrap items-center gap-[9px]">
