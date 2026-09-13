@@ -16,7 +16,9 @@ export function reconcileTranslationWindow(novelId: string): void {
   if (!novel || typeof novel !== 'object' || !('auto_translate' in novel))
     throw new AppError('NOVEL_NOT_FOUND', 'Novel not found', 404);
   const settings = sqlite
-    .prepare('SELECT base_url,model,encrypted_api_key,automatic_paused FROM provider_settings WHERE id=1')
+    .prepare(
+      'SELECT base_url,model,encrypted_api_key,automatic_paused,translation_concurrency FROM provider_settings WHERE id=1',
+    )
     .get();
   const enabled =
     novel.auto_translate === 1 &&
@@ -30,6 +32,13 @@ export function reconcileTranslationWindow(novelId: string): void {
     typeof settings.base_url === 'string' &&
     typeof settings.model === 'string' &&
     typeof settings.encrypted_api_key === 'string';
+  const concurrency =
+    settings &&
+    typeof settings === 'object' &&
+    'translation_concurrency' in settings &&
+    typeof settings.translation_concurrency === 'number'
+      ? settings.translation_concurrency
+      : 1;
   const current = sqlite
     .prepare('SELECT c.ordinal FROM reading_progress p JOIN chapters c ON c.id=p.current_chapter_id WHERE p.novel_id=?')
     .get(novelId);
@@ -37,13 +46,14 @@ export function reconcileTranslationWindow(novelId: string): void {
     current && typeof current === 'object' && 'ordinal' in current && typeof current.ordinal === 'number'
       ? current.ordinal
       : -1;
+  const windowSize = Math.max(5, concurrency);
   const window = sqlite
     .prepare(
       `SELECT c.id,c.paragraphs,c.ordinal,EXISTS(SELECT 1 FROM translations t WHERE t.chapter_id=c.id) AS translated,
       (SELECT j.status FROM jobs j WHERE j.chapter_id=c.id AND j.kind='translate_chapter' ORDER BY j.created_at DESC LIMIT 1) AS job_status
-    FROM chapters c WHERE c.novel_id=? AND c.read_at IS NULL AND c.ordinal>=? ORDER BY c.ordinal LIMIT 5`,
+    FROM chapters c WHERE c.novel_id=? AND c.read_at IS NULL AND c.ordinal>=? ORDER BY c.ordinal LIMIT ?`,
     )
-    .all(novelId, startOrdinal) as WindowChapter[];
+    .all(novelId, startOrdinal, windowSize) as WindowChapter[];
   const ids = window.map((chapter) => chapter.id);
   if (ids.length > 0) {
     const placeholders = ids.map(() => '?').join(',');
@@ -59,6 +69,8 @@ export function reconcileTranslationWindow(novelId: string): void {
       )
       .run(Date.now(), novelId);
   if (!enabled) return;
+  const baseRunAfter = Date.now();
+  let queueOffset = 0;
   for (const chapter of window) {
     if (
       chapter.paragraphs !== null &&
@@ -67,7 +79,8 @@ export function reconcileTranslationWindow(novelId: string): void {
       chapter.job_status !== 'queued' &&
       chapter.job_status !== 'running'
     ) {
-      queueTranslation(chapter.id, false, 'automatic');
+      queueTranslation(chapter.id, false, 'automatic', baseRunAfter + queueOffset);
+      queueOffset += 1;
     }
   }
 }
