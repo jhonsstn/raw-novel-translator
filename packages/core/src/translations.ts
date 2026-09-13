@@ -108,7 +108,7 @@ export function queueNovelTranslations(novelId: string): {
   const provider = getProviderSettings();
   if (candidates.length > 0 && (!provider.baseUrl || !provider.model || !provider.hasApiKey))
     throw new AppError('PROVIDER_NOT_CONFIGURED', 'Configure the translation provider first', 409);
-  const baseRunAfter = Date.now();
+  const baseRunAfter = Date.now() - Math.max(candidates.length, 1);
   sqlite.transaction(() => {
     candidates.forEach((chapter, index) =>
       enqueueTranslationJob(chapter, false, 'manual', provider.revision, baseRunAfter + index),
