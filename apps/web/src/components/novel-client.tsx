@@ -1,6 +1,18 @@
 'use client';
 import Link from 'next/link';
-import { ArrowLeft, BookOpen, Download, Languages, Loader2, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  BookOpen,
+  Check,
+  Download,
+  Languages,
+  Loader2,
+  Pencil,
+  RefreshCw,
+  Square,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useJobFeedback, isJobFeedbackActive } from '../lib/use-job-feedback';
@@ -216,8 +228,19 @@ export function NovelClient({ novelId }: { novelId: string }) {
         completed: chapter.readAt === null,
       }),
     });
-    if (response.ok) void load(false, true);
-    else setError('Reading status update failed');
+    if (response.ok) {
+      setNovel((current) =>
+        current
+          ? {
+              ...current,
+              chapters: current.chapters.map((item) =>
+                item.id === chapter.id ? { ...item, readAt: chapter.readAt === null ? Date.now() : null } : item,
+              ),
+            }
+          : current,
+      );
+      void load(false, true);
+    } else setError('Reading status update failed');
   }
   const visible = useMemo(() => {
     if (!novel) return [];
@@ -437,9 +460,6 @@ export function NovelClient({ novelId }: { novelId: string }) {
                         />
                         {chapter.translated ? 'English ready' : 'Chinese only'}
                       </span>
-                      <button className={`${buttonClass} min-h-0 px-[7px] py-[3px]`} onClick={() => void mark(chapter)}>
-                        {chapter.readAt ? 'Unread' : 'Read'}
-                      </button>
                     </div>
                     {translationAction && !translationDetail && (
                       <span className="sr-only" role="status">
@@ -455,17 +475,29 @@ export function NovelClient({ novelId }: { novelId: string }) {
                       </div>
                     )}
                   </div>
-                  {chapter.fetched && !chapter.translated && (
+                  <div className="flex flex-col items-end gap-2 max-[760px]:col-start-2 max-[760px]:items-start">
+                    {chapter.fetched && !chapter.translated && (
+                      <button
+                        className={`${buttonClass} disabled:cursor-not-allowed disabled:opacity-60`}
+                        aria-busy={translationActive}
+                        disabled={translationActive || translationAction?.state === 'succeeded'}
+                        onClick={() => void translate(chapter.id)}
+                      >
+                        {translationActive ? <Loader2 className="animate-spin" size={15} /> : <Languages size={15} />}
+                        {translationLabel}
+                      </button>
+                    )}
                     <button
-                      className={`${buttonClass} disabled:cursor-not-allowed disabled:opacity-60`}
-                      aria-busy={translationActive}
-                      disabled={translationActive || translationAction?.state === 'succeeded'}
-                      onClick={() => void translate(chapter.id)}
+                      className={`${buttonClass} h-10 min-h-0 w-10 p-0 ${chapter.readAt ? 'text-success' : 'text-muted'}`}
+                      title={chapter.readAt ? 'Mark as unread' : 'Mark as read'}
+                      aria-label={chapter.readAt ? 'Mark chapter as unread' : 'Mark chapter as read'}
+                      aria-pressed={chapter.readAt !== null}
+                      type="button"
+                      onClick={() => void mark(chapter)}
                     >
-                      {translationActive ? <Loader2 className="animate-spin" size={15} /> : <Languages size={15} />}
-                      {translationLabel}
+                      {chapter.readAt ? <Check size={24} strokeWidth={2.75} /> : <Square size={24} strokeWidth={2} />}
                     </button>
-                  )}
+                  </div>
                 </div>
               );
             })}
