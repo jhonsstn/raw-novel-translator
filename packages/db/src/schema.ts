@@ -133,12 +133,12 @@ export const providerSettings = sqliteTable('provider_settings', {
   encryptedApiKey: text('encrypted_api_key'),
   revision: integer('revision').notNull().default(1),
   timeoutSeconds: integer('timeout_seconds').notNull().default(120),
-  chunkCharacters: integer('chunk_characters').notNull().default(3000),
+  chunkCharacters: integer('chunk_characters').notNull().default(10000),
   automaticPaused: integer('automatic_paused', { mode: 'boolean' }).notNull().default(false),
 }, (t) => [
   check('provider_singleton', sql`${t.id} = 1`),
   check('provider_timeout_range', sql`${t.timeoutSeconds} BETWEEN 30 AND 600`),
-  check('provider_chunk_range', sql`${t.chunkCharacters} BETWEEN 500 AND 6000`),
+  check('provider_chunk_range', sql`${t.chunkCharacters} BETWEEN 500 AND 15000`),
 ]);
 
 export const jobs = sqliteTable('jobs', {

@@ -81,7 +81,7 @@ export function updateProviderSettings(input: UpdateProviderInput): ProviderSett
   const timeout = input.timeoutSeconds ?? current.timeout_seconds;
   const chunk = input.chunkCharacters ?? current.chunk_characters;
   if (!Number.isInteger(timeout) || timeout < 30 || timeout > 600) throw new AppError('INVALID_TIMEOUT', 'Timeout must be between 30 and 600 seconds');
-  if (!Number.isInteger(chunk) || chunk < 500 || chunk > 6000) throw new AppError('INVALID_CHUNK_SIZE', 'Chunk size must be between 500 and 6000 code points');
+  if (!Number.isInteger(chunk) || chunk < 500 || chunk > 15000) throw new AppError('INVALID_CHUNK_SIZE', 'Chunk size must be between 500 and 15000 code points');
   const encrypted = input.clearApiKey ? null : input.apiKey !== undefined ? encrypt(input.apiKey) : current.encrypted_api_key;
   const sqlite = getDatabase().sqlite;
   sqlite.transaction(() => {
