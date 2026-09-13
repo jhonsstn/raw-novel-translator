@@ -143,7 +143,7 @@ export function claimJob(lane: 'source' | 'translation', now: number): Job | nul
       .run(now, now, ...laneKinds[lane]);
     const row = sqlite
       .prepare(
-        `SELECT * FROM jobs WHERE status='queued' AND run_after <= ? AND kind IN (${placeholders}) ORDER BY created_at,id LIMIT 1`,
+        `SELECT * FROM jobs WHERE status='queued' AND run_after <= ? AND kind IN (${placeholders}) ORDER BY run_after,created_at,id LIMIT 1`,
       )
       .get(now, ...laneKinds[lane]);
     if (!row) return null;
