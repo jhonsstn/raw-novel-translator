@@ -18,12 +18,15 @@ export interface ConfigurableSourceDefinition {
   siteUrl: string;
   chapterPathPattern: string;
   indexPathTemplate: string;
+  novelIdTemplate?: string | null;
+  chapterIdTemplate?: string | null;
   chapterLinkSelector: string;
   chapterTitleSelector: string;
   chapterTitleExcludeSelector?: string | null;
   chapterContentSelector: string;
   chapterContentStartSelector?: string | null;
   chapterContentEndSelector?: string | null;
+  chapterContentEndText?: string | null;
   chapterContentExcludeSelector?: string | null;
 }
 
