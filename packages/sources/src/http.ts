@@ -95,7 +95,7 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   return promise;
 }
 
-async function rawFetch(url: URL, limit: number, signal: AbortSignal): Promise<{ bytes: Buffer; contentType: string | null; status: number; retryAfter: string | null }> {
+async function rawFetch(url: URL, limit: number, signal: AbortSignal, allowedHosts: ReadonlySet<string>): Promise<{ bytes: Buffer; contentType: string | null; status: number; retryAfter: string | null }> {
   let current = url;
   for (let redirects = 0; redirects <= 3; redirects += 1) {
     let response: Response;
@@ -108,12 +108,11 @@ async function rawFetch(url: URL, limit: number, signal: AbortSignal): Promise<{
       const location = response.headers.get('location');
       if (!location || redirects === 3) throw new SourceError('SOURCE_REDIRECT', 'Source redirect was invalid or exceeded the limit');
       const next = new URL(location, current);
-      if (next.protocol !== 'https:' || next.hostname !== 'www.piaotia.com' || next.port || next.username || next.password) throw new SourceError('SOURCE_REDIRECT', 'Source redirected outside its approved host');
+      if (next.protocol !== 'https:' || !allowedHosts.has(next.hostname) || next.port || next.username || next.password) throw new SourceError('SOURCE_REDIRECT', 'Source redirected outside its approved host');
       current = next;
       continue;
     }
     if (!response.body) throw new SourceError('SOURCE_NETWORK', 'Source response has no body');
-    // undici and DOM ship structurally equivalent ReadableStream types with incompatible declarations.
     const stream = response.body as unknown as ReadableStream<Uint8Array>;
     let bytes: Buffer;
     try {
@@ -127,10 +126,10 @@ async function rawFetch(url: URL, limit: number, signal: AbortSignal): Promise<{
   throw new SourceError('SOURCE_REDIRECT', 'Source redirect exceeded the limit');
 }
 
-async function robots(origin: string, signal: AbortSignal): Promise<{ disallow: string[]; crawlDelayMs: number }> {
+async function robots(origin: string, signal: AbortSignal, allowedHosts: ReadonlySet<string>): Promise<{ disallow: string[]; crawlDelayMs: number }> {
   const cached = robotsCache.get(origin);
   if (cached && cached.expiresAt > Date.now()) return cached;
-  const response = await rawFetch(new URL('/robots.txt', origin), 256 * 1024, signal);
+  const response = await rawFetch(new URL('/robots.txt', origin), 256 * 1024, signal, allowedHosts);
   if (response.status === 404) return { disallow: [], crawlDelayMs: 0 };
   if (response.status >= 400) throw new SourceError('ROBOTS_UNAVAILABLE', `Could not read robots policy (${response.status})`);
   const parsed = parseRobots(decodeSourceBytes(response.bytes, response.contentType));
@@ -140,22 +139,24 @@ async function robots(origin: string, signal: AbortSignal): Promise<{ disallow: 
 
 export interface SourceTransportOptions {
   signal: AbortSignal;
+  allowedHosts?: readonly string[];
   beforeRequest?: (minimumDelayMs: number) => Promise<void>;
 }
 
 export function createSourceTransport(options: SourceTransportOptions): (url: string) => Promise<string> {
+  const allowedHosts = new Set(options.allowedHosts ?? ['www.piaotia.com']);
   return async (input) => {
     const url = new URL(input);
-    if (url.protocol !== 'https:' || url.hostname !== 'www.piaotia.com' || url.port || url.username || url.password) throw new SourceError('UNSUPPORTED_URL', 'Source transport rejected the URL');
-    const policy = await robots(url.origin, options.signal);
+    if (url.protocol !== 'https:' || !allowedHosts.has(url.hostname) || url.port || url.username || url.password) throw new SourceError('UNSUPPORTED_URL', 'Source transport rejected the URL');
+    const policy = await robots(url.origin, options.signal, allowedHosts);
     if (policy.disallow.some((path) => url.pathname.startsWith(path))) throw new SourceError('ROBOTS_DISALLOWED', 'Source path is disallowed by robots policy');
     await options.beforeRequest?.(Math.max(2000, policy.crawlDelayMs));
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        const limit = url.pathname.endsWith('/index.html') ? 8 * 1024 * 1024 : 2 * 1024 * 1024;
-        const response = await rawFetch(url, limit, options.signal);
+        const limit = /index|list|目录/i.test(url.pathname) ? 8 * 1024 * 1024 : 2 * 1024 * 1024;
+        const response = await rawFetch(url, limit, options.signal, allowedHosts);
         if (response.status === 401 || response.status === 403) throw new SourceError('SOURCE_BLOCKED', `Source denied access (${response.status})`);
-        if (response.status === 404) throw new SourceError('SOURCE_NOT_FOUND', 'Source chapter was not found');
+        if (response.status === 404) throw new SourceError('SOURCE_NOT_FOUND', 'Source page was not found');
         if (response.status === 429 || response.status >= 500) {
           if (attempt === 2) throw new SourceError('SOURCE_NETWORK', `Source failed after retries (${response.status})`);
           const retrySeconds = Number(response.retryAfter ?? 0);
