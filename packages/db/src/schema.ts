@@ -98,6 +98,25 @@ export const translationChunks = sqliteTable('translation_chunks', {
   outputTokens: integer('output_tokens'),
 }, (t) => [uniqueIndex('translation_chunks_run_index').on(t.runId, t.chunkIndex)]);
 
+export const sourceDefinitions = sqliteTable('source_definitions', {
+  sourceId: text('source_id').primaryKey(),
+  name: text('name').notNull(),
+  siteUrl: text('site_url').notNull(),
+  chapterPathPattern: text('chapter_path_pattern').notNull(),
+  indexPathTemplate: text('index_path_template').notNull(),
+  novelIdTemplate: text('novel_id_template'),
+  chapterIdTemplate: text('chapter_id_template'),
+  chapterLinkSelector: text('chapter_link_selector').notNull(),
+  chapterTitleSelector: text('chapter_title_selector').notNull(),
+  chapterTitleExcludeSelector: text('chapter_title_exclude_selector'),
+  chapterContentSelector: text('chapter_content_selector').notNull(),
+  chapterContentStartSelector: text('chapter_content_start_selector'),
+  chapterContentEndSelector: text('chapter_content_end_selector'),
+  chapterContentEndText: text('chapter_content_end_text'),
+  chapterContentExcludeSelector: text('chapter_content_exclude_selector'),
+  ...timestamps,
+});
+
 export const sourceSettings = sqliteTable('source_settings', {
   sourceId: text('source_id').primaryKey(),
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
