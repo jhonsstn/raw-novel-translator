@@ -87,12 +87,6 @@ function validateBaseUrl(input: string): string {
       'INVALID_TTS_URL',
       'TTS provider URL must be an HTTP(S) origin/path without credentials, query, or fragment',
     );
-  const exceptions = (process.env.AI_ALLOWED_PRIVATE_ORIGINS ?? '')
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-  if (url.protocol !== 'https:' && !exceptions.includes(url.origin))
-    throw new AppError('INVALID_TTS_URL', 'HTTP TTS providers require an exact AI_ALLOWED_PRIVATE_ORIGINS entry');
   return url.href.replace(/\/$/, '');
 }
 

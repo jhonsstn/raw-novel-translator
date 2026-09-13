@@ -1,7 +1,4 @@
 import OpenAI from 'openai';
-import { lookup } from 'node:dns';
-import { isIP } from 'node:net';
-import { Agent, fetch as undiciFetch } from 'undici';
 
 export const PROMPT_VERSION = 1;
 export const SYSTEM_PROMPT =
@@ -21,72 +18,13 @@ export interface TranslationChunkResult {
   outputTokens: number | null;
 }
 
-function isPublicAddress(input: string): boolean {
-  const address = input.toLowerCase().replace(/^::ffff:/, '');
-  const family = isIP(address);
-  if (family === 4) {
-    const parts = address.split('.').map(Number);
-    const first = parts[0] ?? -1;
-    const second = parts[1] ?? -1;
-    return !(
-      first === 0 ||
-      first === 10 ||
-      first === 127 ||
-      first >= 224 ||
-      (first === 169 && second === 254) ||
-      (first === 172 && second >= 16 && second <= 31) ||
-      (first === 192 && second === 168) ||
-      (first === 100 && second >= 64 && second <= 127)
-    );
-  }
-  if (family === 6)
-    return !(
-      address === '::' ||
-      address === '::1' ||
-      address.startsWith('fc') ||
-      address.startsWith('fd') ||
-      /^fe[89ab]/.test(address)
-    );
-  return false;
-}
-
-const guardedAgent = new Agent({
-  connect: {
-    lookup(hostname, _options, callback) {
-      lookup(hostname, { all: true, verbatim: true }, (error, addresses) => {
-        if (error) {
-          callback(error, '');
-          return;
-        }
-        const address = addresses.find((candidate) => isPublicAddress(candidate.address));
-        if (!address || addresses.some((candidate) => !isPublicAddress(candidate.address))) {
-          const blocked = new Error(`Provider host ${hostname} resolves to a non-public address`);
-          Object.assign(blocked, { code: 'ENETUNREACH' });
-          callback(blocked, '');
-          return;
-        }
-        callback(null, address.address, address.family);
-      });
-    },
-  },
-});
-
 export function providerFetch(baseUrl: string): typeof globalThis.fetch {
   const expected = new URL(baseUrl);
-  const privateOrigins = (process.env.AI_ALLOWED_PRIVATE_ORIGINS ?? '')
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
-  const allowPrivate = privateOrigins.includes(expected.origin);
   return async (input, init) => {
     const target = new URL(typeof input === 'string' || input instanceof URL ? input.toString() : input.url);
     if (target.origin !== expected.origin || !target.pathname.startsWith(expected.pathname.replace(/\/$/, '')))
       throw new Error('Provider request escaped the configured base URL');
-    const options = { ...init, redirect: 'manual' as const };
-    if (allowPrivate) return globalThis.fetch(target, options);
-    // undici and DOM expose compatible fetch objects with separate declarations.
-    const undiciOptions = { ...options, dispatcher: guardedAgent } as unknown as Parameters<typeof undiciFetch>[1];
-    return undiciFetch(target, undiciOptions) as unknown as Response;
+    return globalThis.fetch(target, { ...init, redirect: 'manual' });
   };
 }
 function delay(ms: number, signal: AbortSignal): Promise<void> {

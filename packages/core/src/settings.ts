@@ -116,13 +116,6 @@ function validateBaseUrl(input: string): string {
       'INVALID_PROVIDER_URL',
       'Provider URL must be an HTTP(S) origin/path without credentials, query, or fragment',
     );
-  const origin = url.origin;
-  const exceptions = (process.env.AI_ALLOWED_PRIVATE_ORIGINS ?? '')
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-  if (url.protocol !== 'https:' && !exceptions.includes(origin))
-    throw new AppError('INVALID_PROVIDER_URL', 'HTTP providers require an exact AI_ALLOWED_PRIVATE_ORIGINS entry');
   return url.href.replace(/\/$/, '');
 }
 
