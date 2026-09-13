@@ -10,6 +10,7 @@ export interface ProviderSettingsView {
   revision: number;
   timeoutSeconds: number;
   chunkCharacters: number;
+  translationConcurrency: number;
   automaticPaused: boolean;
   hasApiKey: boolean;
 }
@@ -19,6 +20,7 @@ export interface ProviderCredentials {
   revision: number;
   timeoutSeconds: number;
   chunkCharacters: number;
+  translationConcurrency: number;
   automaticPaused: boolean;
   hasApiKey: true;
   apiKey: string;
@@ -30,6 +32,7 @@ export interface UpdateProviderInput {
   clearApiKey?: boolean | undefined;
   timeoutSeconds?: number | undefined;
   chunkCharacters?: number | undefined;
+  translationConcurrency?: number | undefined;
 }
 interface ProviderRow {
   base_url: string | null;
@@ -38,6 +41,7 @@ interface ProviderRow {
   revision: number;
   timeout_seconds: number;
   chunk_characters: number;
+  translation_concurrency: number;
   automatic_paused: number;
 }
 
@@ -81,6 +85,7 @@ export function getProviderSettings(): ProviderSettingsView {
     revision: value.revision,
     timeoutSeconds: value.timeout_seconds,
     chunkCharacters: value.chunk_characters,
+    translationConcurrency: value.translation_concurrency,
     automaticPaused: value.automatic_paused === 1,
     hasApiKey: value.encrypted_api_key !== null,
   };
@@ -128,25 +133,36 @@ export function updateProviderSettings(input: UpdateProviderInput): ProviderSett
   const model = input.model === undefined ? current.model : input.model?.trim() || null;
   const timeout = input.timeoutSeconds ?? current.timeout_seconds;
   const chunk = input.chunkCharacters ?? current.chunk_characters;
+  const concurrency = input.translationConcurrency ?? current.translation_concurrency;
   if (!Number.isInteger(timeout) || timeout < 30 || timeout > 600)
     throw new AppError('INVALID_TIMEOUT', 'Timeout must be between 30 and 600 seconds');
   if (!Number.isInteger(chunk) || chunk < 500 || chunk > 15000)
     throw new AppError('INVALID_CHUNK_SIZE', 'Chunk size must be between 500 and 15000 code points');
+  if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 20)
+    throw new AppError('INVALID_TRANSLATION_CONCURRENCY', 'Parallel translations must be between 1 and 20');
   const encrypted = input.clearApiKey
     ? null
     : input.apiKey !== undefined
       ? encrypt(input.apiKey)
       : current.encrypted_api_key;
+  const providerChanged =
+    baseUrl !== current.base_url ||
+    model !== current.model ||
+    timeout !== current.timeout_seconds ||
+    chunk !== current.chunk_characters ||
+    input.apiKey !== undefined ||
+    (input.clearApiKey === true && current.encrypted_api_key !== null);
   const sqlite = getDatabase().sqlite;
   sqlite.transaction(() => {
     sqlite
       .prepare(
-        'UPDATE provider_settings SET base_url=?,model=?,encrypted_api_key=?,timeout_seconds=?,chunk_characters=?,revision=revision+1 WHERE id=1',
+        'UPDATE provider_settings SET base_url=?,model=?,encrypted_api_key=?,timeout_seconds=?,chunk_characters=?,translation_concurrency=?,revision=revision+? WHERE id=1',
       )
-      .run(baseUrl, model, encrypted, timeout, chunk);
-    sqlite
-      .prepare("UPDATE jobs SET status='cancelled',updated_at=? WHERE kind='translate_chapter' AND status='queued'")
-      .run(Date.now());
+      .run(baseUrl, model, encrypted, timeout, chunk, concurrency, providerChanged ? 1 : 0);
+    if (providerChanged)
+      sqlite
+        .prepare("UPDATE jobs SET status='cancelled',updated_at=? WHERE kind='translate_chapter' AND status='queued'")
+        .run(Date.now());
   })();
   return getProviderSettings();
 }
