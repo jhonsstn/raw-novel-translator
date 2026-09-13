@@ -3,13 +3,20 @@ import Link from 'next/link';
 import {
   ArrowLeft,
   BookOpen,
-  Check,
+  CheckCircle2,
+  Circle,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Download,
+  Ellipsis,
+  ExternalLink,
   Languages,
   Loader2,
   Pencil,
   RefreshCw,
-  Square,
+  Search,
+  Settings2,
   Trash2,
   X,
 } from 'lucide-react';
@@ -109,6 +116,7 @@ export function NovelClient({ novelId }: { novelId: string }) {
   const [author, setAuthor] = useState('');
   const { actions: jobActions, start: startJob } = useJobFeedback(`novel:${novelId}`);
   const refreshedTranslations = useRef(new Set<string>());
+  const actionsMenu = useRef<HTMLDetailsElement | null>(null);
   const load = useCallback(
     async (initial = false, force = false) => {
       if (request.current) {
@@ -143,6 +151,20 @@ export function NovelClient({ novelId }: { novelId: string }) {
       request.current = null;
     };
   }, [load]);
+  useEffect(() => {
+    function dismissActions(event: PointerEvent) {
+      if (!actionsMenu.current?.contains(event.target as Node)) actionsMenu.current?.removeAttribute('open');
+    }
+    function dismissActionsWithKeyboard(event: KeyboardEvent) {
+      if (event.key === 'Escape') actionsMenu.current?.removeAttribute('open');
+    }
+    document.addEventListener('pointerdown', dismissActions);
+    document.addEventListener('keydown', dismissActionsWithKeyboard);
+    return () => {
+      document.removeEventListener('pointerdown', dismissActions);
+      document.removeEventListener('keydown', dismissActionsWithKeyboard);
+    };
+  }, []);
   useEffect(() => {
     let shouldRefresh = false;
     for (const [key, action] of Object.entries(jobActions)) {
@@ -339,10 +361,14 @@ export function NovelClient({ novelId }: { novelId: string }) {
       </div>
     );
   const pages = Math.max(1, Math.ceil(visible.length / 50));
-  const chapters = visible.slice((page - 1) * 50, page * 50);
+  const currentPage = Math.min(page, pages);
+  const chapters = visible.slice((currentPage - 1) * 50, currentPage * 50);
   const continueId = novel.currentChapterId ?? novel.chapters.find((chapter) => chapter.fetched)?.id;
   const sourceUrl = novel.chapters[0]?.canonicalUrl;
   const readyToTranslate = novel.chapters.filter((chapter) => chapter.fetched && !chapter.translated).length;
+  const unreadCount = novel.chapters.filter((chapter) => chapter.readAt === null).length;
+  const resultStart = visible.length === 0 ? 0 : (currentPage - 1) * 50 + 1;
+  const resultEnd = Math.min(currentPage * 50, visible.length);
   const checkAction = jobActions['check-updates'];
   const checkActive = isJobFeedbackActive(checkAction);
   const checkLabel =
@@ -366,14 +392,19 @@ export function NovelClient({ novelId }: { novelId: string }) {
     'w-full rounded-[10px] border border-line bg-card px-[13px] py-[11px] text-ink outline-none transition-[border-color,box-shadow,background-color] duration-150 placeholder:text-muted/70 hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-accent)_18%,transparent)]';
   const switchClass =
     "h-6 w-11 shrink-0 rounded-full border-0 bg-line-strong p-[3px] after:block after:size-[18px] after:rounded-full after:bg-white after:shadow-[0_1px_3px_rgb(0_0_0/25%)] after:transition-transform after:duration-200 after:content-['']";
+  const menuItemClass =
+    'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-ink transition-colors hover:bg-card-hover disabled:cursor-not-allowed disabled:opacity-45';
   return (
     <>
-      <Link className={buttonClass} href="/">
+      <Link
+        className="inline-flex items-center gap-2 text-sm font-bold text-muted transition-colors hover:text-ink"
+        href="/"
+      >
         <ArrowLeft size={16} /> Library
       </Link>
-      <section className="mt-[25px] mb-8 flex items-center justify-between gap-8 max-[760px]:flex-col max-[760px]:items-start max-[760px]:gap-5">
-        <div className="flex max-w-[760px] items-center gap-6">
-          <div className="relative grid aspect-2/3 w-[120px] shrink-0 place-items-center overflow-hidden bg-cover-art text-white after:pointer-events-none after:absolute after:inset-0 after:bg-cover-overlay">
+      <section className="mt-7 mb-8 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-8 max-[800px]:grid-cols-1 max-[800px]:gap-6">
+        <div className="flex min-w-0 items-center gap-6 max-[560px]:items-start max-[560px]:gap-4">
+          <div className="relative grid aspect-2/3 w-[112px] shrink-0 place-items-center overflow-hidden rounded bg-cover-art text-white shadow-novel after:pointer-events-none after:absolute after:inset-0 after:bg-cover-overlay max-[560px]:w-[84px]">
             {novel.coverUrl && (
               <img
                 className="absolute inset-0 z-10 size-full bg-paper-raised object-contain"
@@ -381,93 +412,135 @@ export function NovelClient({ novelId }: { novelId: string }) {
                 alt=""
               />
             )}
-            <div className="relative z-10 w-3/4 border border-white/40 px-4 py-5 text-center font-serif text-[15px] leading-tight">
+            <div className="relative z-10 w-3/4 border border-white/40 px-3 py-4 text-center font-serif text-sm leading-tight max-[560px]:text-[11px]">
               {novel.displayTitle}
             </div>
           </div>
-          <div>
-            <div className="mb-2.5 text-[11px] font-extrabold uppercase tracking-[.15em] text-accent-ink">
+          <div className="min-w-0">
+            <div className="mb-2 text-[11px] font-extrabold uppercase tracking-[.15em] text-accent-ink">
               {novel.author ?? 'Unknown author'}
             </div>
             <h1>{novel.displayTitle}</h1>
-            <p className="mt-[13px] max-w-[660px] text-muted">
-              {novel.description ??
-                `${novel.downloadedCount}/${novel.chapterCount} downloaded · ${novel.translatedCount} translated`}
-            </p>
+            {novel.description && <p className="mt-3 max-w-[660px] text-muted">{novel.description}</p>}
+            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted">
+              <span className="inline-flex items-center gap-1.5">
+                <Download size={14} />
+                {novel.downloadedCount} of {novel.chapterCount} downloaded
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Languages size={14} />
+                {novel.translatedCount} translated
+              </span>
+            </div>
             {sourceUrl && (
-              <a className="text-muted" href={sourceUrl} target="_blank" rel="noreferrer">
-                View source: {novel.sourceTitle}
+              <a
+                className="mt-2 inline-flex max-w-full items-center gap-1.5 text-sm text-muted transition-colors hover:text-ink"
+                href={sourceUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span className="truncate">{novel.sourceTitle}</span>
+                <ExternalLink className="shrink-0" size={13} />
               </a>
             )}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-[9px]">
+        <div className="flex items-center justify-end gap-2.5 max-[800px]:justify-start max-[560px]:w-full">
           {continueId && (
-            <Link className={primaryButtonClass} href={`/read/${continueId}`}>
-              <BookOpen size={16} /> Continue
+            <Link className={`${primaryButtonClass} px-5 max-[560px]:flex-1`} href={`/read/${continueId}`}>
+              <BookOpen size={16} /> Continue reading
             </Link>
           )}
-          <button
-            className={`${buttonClass} disabled:cursor-not-allowed disabled:opacity-50`}
-            disabled={bulkQueueing || readyToTranslate === 0}
-            title={readyToTranslate === 0 ? 'No downloaded untranslated chapters are ready to queue.' : undefined}
-            onClick={() => void translateAll()}
-          >
-            {bulkQueueing ? <Loader2 className="animate-spin" size={16} /> : <Languages size={16} />}
-            {bulkQueueing ? 'Queueing…' : `Translate all${readyToTranslate > 0 ? ` (${readyToTranslate})` : ''}`}
-          </button>
-          <button
-            className={`${buttonClass} disabled:cursor-not-allowed disabled:opacity-50`}
-            disabled={!novel.epubReady || downloading}
-            aria-describedby={!novel.epubReady ? 'epub-availability' : undefined}
-            onClick={() => void downloadEpub()}
-          >
-            <Download size={16} /> {downloading ? 'Generating EPUB…' : 'Download EPUB'}
-          </button>
-          {!novel.epubReady && (
-            <span id="epub-availability" className="sr-only">
-              Available when all chapters have English translations.
-            </span>
-          )}
-          <div className="flex flex-col items-start gap-1">
-            <button
-              className={`${buttonClass} disabled:cursor-not-allowed disabled:opacity-60`}
-              aria-busy={checkActive}
-              disabled={checkActive}
-              onClick={() => void check()}
-            >
-              {checkActive ? <Loader2 className="animate-spin" size={16} /> : <RefreshCw size={16} />}
-              {checkLabel}
-            </button>
-            {checkAction && !checkDetail && (
-              <span className="sr-only" role="status">
-                {checkLabel}
-              </span>
-            )}
-            {checkDetail && (
-              <span
-                className={`max-w-64 text-xs ${checkDetailIsError ? 'text-danger' : 'text-warning'}`}
-                role={checkDetailIsError ? 'alert' : 'status'}
+          <details className="group relative" ref={actionsMenu}>
+            <summary className={`${buttonClass} list-none px-4 [&::-webkit-details-marker]:hidden`}>
+              <Ellipsis size={17} />
+              More
+              <ChevronDown className="transition-transform group-open:rotate-180" size={14} />
+            </summary>
+            <div className="absolute right-0 z-30 mt-2 w-64 rounded-xl border border-line bg-card p-1.5 shadow-float max-[800px]:right-auto max-[800px]:left-0">
+              <button
+                className={menuItemClass}
+                type="button"
+                disabled={bulkQueueing || readyToTranslate === 0}
+                title={readyToTranslate === 0 ? 'No downloaded untranslated chapters are ready to queue.' : undefined}
+                onClick={() => {
+                  actionsMenu.current?.removeAttribute('open');
+                  void translateAll();
+                }}
               >
-                {checkDetail}
-              </span>
-            )}
-          </div>
-          <button className={buttonClass} onClick={openMetadata}>
-            <Pencil size={16} /> Edit
-          </button>
-          <button
-            className={`${buttonClass} text-danger`}
-            aria-label="Delete novel"
-            onClick={() => setDeleteConfirmOpen(true)}
-          >
-            <Trash2 size={16} />
-          </button>
+                {bulkQueueing ? <Loader2 className="animate-spin" size={16} /> : <Languages size={16} />}
+                <span>{bulkQueueing ? 'Queueing translations…' : `Translate remaining (${readyToTranslate})`}</span>
+              </button>
+              <button
+                className={menuItemClass}
+                type="button"
+                disabled={!novel.epubReady || downloading}
+                aria-describedby={!novel.epubReady ? 'epub-availability' : undefined}
+                onClick={() => {
+                  actionsMenu.current?.removeAttribute('open');
+                  void downloadEpub();
+                }}
+              >
+                <Download size={16} />
+                <span>{downloading ? 'Generating EPUB…' : 'Download EPUB'}</span>
+              </button>
+              {!novel.epubReady && (
+                <span id="epub-availability" className="sr-only">
+                  Available when all chapters have English translations.
+                </span>
+              )}
+              <button
+                className={menuItemClass}
+                type="button"
+                aria-busy={checkActive}
+                disabled={checkActive}
+                onClick={() => {
+                  actionsMenu.current?.removeAttribute('open');
+                  void check();
+                }}
+              >
+                {checkActive ? <Loader2 className="animate-spin" size={16} /> : <RefreshCw size={16} />}
+                <span>{checkLabel}</span>
+              </button>
+              <button
+                className={menuItemClass}
+                type="button"
+                onClick={() => {
+                  actionsMenu.current?.removeAttribute('open');
+                  openMetadata();
+                }}
+              >
+                <Pencil size={16} /> Edit details
+              </button>
+              <div className="my-1 border-t border-line" />
+              <button
+                className={`${menuItemClass} text-danger hover:bg-danger-soft`}
+                type="button"
+                onClick={() => {
+                  actionsMenu.current?.removeAttribute('open');
+                  setDeleteConfirmOpen(true);
+                }}
+              >
+                <Trash2 size={16} /> Delete novel
+              </button>
+            </div>
+          </details>
         </div>
       </section>
+      {checkAction && (
+        <div
+          className={`mb-3 flex items-center gap-2.5 rounded-[10px] border px-3.5 py-3 text-sm ${
+            checkDetailIsError ? 'border-danger/35 bg-danger-soft text-danger' : 'border-line bg-card text-ink'
+          }`}
+          role={checkDetailIsError ? 'alert' : 'status'}
+        >
+          {checkActive && <Loader2 className="animate-spin" size={15} />}
+          {checkDetail ?? checkLabel}
+        </div>
+      )}
       {bulkMessage && (
         <div
-          className="mb-[18px] rounded-[10px] border border-[color-mix(in_srgb,var(--color-success)_28%,var(--color-line))] bg-[color-mix(in_srgb,var(--color-success)_8%,var(--color-card))] px-3.5 py-3 text-sm text-ink"
+          className="mb-3 rounded-[10px] border border-[color-mix(in_srgb,var(--color-success)_28%,var(--color-line))] bg-[color-mix(in_srgb,var(--color-success)_8%,var(--color-card))] px-3.5 py-3 text-sm text-ink"
           role="status"
         >
           {bulkMessage}
@@ -475,41 +548,66 @@ export function NovelClient({ novelId }: { novelId: string }) {
       )}
       {error && (
         <div
-          className="mb-[18px] rounded-[10px] border border-[color-mix(in_srgb,var(--color-danger)_35%,var(--color-line))] bg-danger-soft px-3.5 py-3 text-danger"
+          className="mb-3 rounded-[10px] border border-[color-mix(in_srgb,var(--color-danger)_35%,var(--color-line))] bg-danger-soft px-3.5 py-3 text-danger"
           role="alert"
         >
           {error}
         </div>
       )}
-      <div className="grid grid-cols-[minmax(0,1.65fr)_minmax(260px,.65fr)] items-start gap-5 max-[960px]:grid-cols-1">
-        <section className="rounded-[15px] border border-line bg-card p-[22px] text-ink shadow-card max-[760px]:p-[17px]">
-          <div className="flex flex-wrap items-center justify-between gap-[9px]">
-            <h2>Chapters</h2>
-            <input
-              className={`${inputClass} max-w-[260px]`}
-              placeholder="Search chapters"
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setPage(1);
-              }}
-            />
-            <select
-              className={`${inputClass} max-w-40`}
-              value={filter}
-              onChange={(event) => {
-                setFilter(chapterFilter(event.target.value));
-                setPage(1);
-              }}
-            >
-              <option value="all">All</option>
-              <option value="unread">Unread</option>
-              <option value="downloaded">Downloaded</option>
-              <option value="translated">Translated</option>
-            </select>
+      <section className="overflow-hidden rounded-[15px] border border-line bg-card text-ink shadow-card">
+        <header className="p-[22px] max-[760px]:p-[17px]">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="flex items-baseline gap-2.5">
+                <h2>Chapters</h2>
+                <span className="text-sm text-muted">{novel.chapterCount}</span>
+              </div>
+              <p className="mt-1 text-sm text-muted">
+                {novel.chapterCount - unreadCount} read · {novel.translatedCount} English ready
+              </p>
+            </div>
           </div>
-          <div className="mt-[15px] grid border-t border-line">
-            {chapters.map((chapter) => {
+          <div className="mt-5 flex gap-2.5 max-[560px]:flex-col">
+            <label className="relative min-w-0 flex-1">
+              <span className="sr-only">Search chapters</span>
+              <Search className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted" size={16} />
+              <input
+                className={`${inputClass} pl-10`}
+                placeholder="Search by chapter title"
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setPage(1);
+                }}
+              />
+            </label>
+            <label className="max-[560px]:w-full">
+              <span className="sr-only">Filter chapters</span>
+              <select
+                className={`${inputClass} min-w-48 max-[560px]:min-w-0`}
+                value={filter}
+                onChange={(event) => {
+                  setFilter(chapterFilter(event.target.value));
+                  setPage(1);
+                }}
+              >
+                <option value="all">All chapters ({novel.chapterCount})</option>
+                <option value="unread">Unread ({unreadCount})</option>
+                <option value="downloaded">Downloaded ({novel.downloadedCount})</option>
+                <option value="translated">English ready ({novel.translatedCount})</option>
+              </select>
+            </label>
+          </div>
+        </header>
+        <div className="border-t border-line">
+          {chapters.length === 0 ? (
+            <div className="grid place-items-center px-6 py-14 text-center text-muted">
+              <Search className="mb-3 opacity-60" size={22} />
+              <strong className="text-ink">No chapters found</strong>
+              <span className="mt-1 text-sm">Try a different search or filter.</span>
+            </div>
+          ) : (
+            chapters.map((chapter) => {
               const translationAction = jobActions[`translation:${chapter.id}`];
               const translationActive = isJobFeedbackActive(translationAction);
               const translationLabel =
@@ -529,121 +627,164 @@ export function NovelClient({ novelId }: { novelId: string }) {
                 translationAction?.state === 'failed' ||
                 translationAction?.state === 'cancelled' ||
                 translationAction?.state === 'request-error';
+              const chapterStatus = chapter.translated
+                ? 'English ready'
+                : chapter.fetched
+                  ? 'Source ready'
+                  : 'Downloading';
               return (
-                <div
-                  className="grid grid-cols-[64px_1fr_auto] items-center gap-3.5 rounded-lg border-b border-line px-2.5 py-[15px] hover:bg-card-hover max-[760px]:grid-cols-[42px_1fr] max-[760px]:px-1 [&>button]:max-[760px]:col-start-2"
+                <article
+                  className="group grid grid-cols-[58px_minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-[22px] py-4 last:border-b-0 hover:bg-card-hover max-[640px]:grid-cols-[40px_minmax(0,1fr)_auto] max-[640px]:gap-2 max-[640px]:px-[17px]"
                   key={chapter.id}
                 >
-                  <span className="text-xs text-muted tabular-nums">{String(chapter.ordinal).padStart(3, '0')}</span>
-                  <div>
-                    <Link href={`/read/${chapter.id}`}>
-                      <strong>{chapter.title}</strong>
-                    </Link>
-                    <div className="mt-3.5 flex flex-wrap gap-[7px] text-[11px] text-muted">
-                      <span>
-                        <i
-                          className={`mr-1 inline-block size-[7px] rounded-full ${
-                            chapter.fetched
-                              ? 'bg-success shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-success)_14%,transparent)]'
-                              : 'bg-line-strong'
-                          }`}
-                        />
-                        {chapter.fetched ? 'Downloaded' : 'Queued'}
-                      </span>
-                      <span>
-                        <i
-                          className={`mr-1 inline-block size-[7px] rounded-full ${
-                            chapter.translated
-                              ? 'bg-success shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-success)_14%,transparent)]'
-                              : 'bg-line-strong'
-                          }`}
-                        />
-                        {chapter.translated ? 'English ready' : 'Chinese only'}
-                      </span>
+                  <span className="text-xs text-muted tabular-nums">{chapter.ordinal}</span>
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <Link className="min-w-0 hover:text-accent-ink" href={`/read/${chapter.id}`}>
+                        <strong className="line-clamp-2">{chapter.title}</strong>
+                      </Link>
+                      {chapter.id === novel.currentChapterId && (
+                        <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent-ink">
+                          Current
+                        </span>
+                      )}
                     </div>
-                    {translationAction && !translationDetail && (
-                      <span className="sr-only" role="status">
-                        {translationLabel}
-                      </span>
-                    )}
-                    {translationDetail && (
-                      <div
-                        className={`mt-2 text-xs ${translationDetailIsError ? 'text-danger' : 'text-warning'}`}
-                        role={translationDetailIsError ? 'alert' : 'status'}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 font-semibold ${
+                          chapter.translated
+                            ? 'bg-success-soft text-success'
+                            : chapter.fetched
+                              ? 'bg-accent-soft text-accent-ink'
+                              : 'bg-paper text-muted'
+                        }`}
                       >
-                        {translationDetail}
-                      </div>
-                    )}
+                        <span className="size-1.5 rounded-full bg-current" />
+                        {chapterStatus}
+                      </span>
+                      {translationDetail && (
+                        <span
+                          className={translationDetailIsError ? 'text-danger' : 'text-warning'}
+                          role={translationDetailIsError ? 'alert' : 'status'}
+                        >
+                          {translationDetail}
+                        </span>
+                      )}
+                      {translationAction && !translationDetail && (
+                        <span className="sr-only" role="status">
+                          {translationLabel}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex flex-col items-end gap-2 max-[760px]:col-start-2 max-[760px]:items-start">
+                  <div className="flex items-center justify-end gap-1.5">
                     {chapter.fetched && !chapter.translated && (
                       <button
-                        className={`${buttonClass} disabled:cursor-not-allowed disabled:opacity-60`}
+                        className={`${buttonClass} h-9 min-h-0 px-3 disabled:cursor-not-allowed disabled:opacity-60 max-[640px]:w-9 max-[640px]:px-0`}
+                        type="button"
                         aria-busy={translationActive}
                         disabled={translationActive || translationAction?.state === 'succeeded'}
                         onClick={() => void translate(chapter.id)}
                       >
-                        {translationActive ? <Loader2 className="animate-spin" size={15} /> : <Languages size={15} />}
-                        {translationLabel}
+                        {translationActive ? <Loader2 className="animate-spin" size={14} /> : <Languages size={14} />}
+                        <span className="max-[640px]:sr-only">{translationLabel}</span>
                       </button>
                     )}
                     <button
-                      className={`${buttonClass} h-10 min-h-0 w-10 p-0 ${chapter.readAt ? 'text-success' : 'text-muted'}`}
+                      className={`grid size-9 place-items-center rounded-lg transition-colors hover:bg-paper ${
+                        chapter.readAt ? 'bg-success-soft text-success' : 'text-muted hover:text-ink'
+                      }`}
                       title={chapter.readAt ? 'Mark as unread' : 'Mark as read'}
                       aria-label={chapter.readAt ? 'Mark chapter as unread' : 'Mark chapter as read'}
                       aria-pressed={chapter.readAt !== null}
                       type="button"
                       onClick={() => void mark(chapter)}
                     >
-                      {chapter.readAt ? <Check size={24} strokeWidth={2.75} /> : <Square size={24} strokeWidth={2} />}
+                      {chapter.readAt ? <CheckCircle2 size={18} /> : <Circle size={18} />}
                     </button>
                   </div>
-                </div>
+                </article>
               );
-            })}
-          </div>
+            })
+          )}
+        </div>
+        <footer className="flex min-h-14 items-center justify-between gap-4 border-t border-line px-[22px] text-sm text-muted max-[760px]:px-[17px]">
+          <span>
+            Showing {resultStart}–{resultEnd} of {visible.length}
+          </span>
           {pages > 1 && (
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-[9px]">
-              <button className={buttonClass} disabled={page === 1} onClick={() => setPage(page - 1)}>
-                Previous
-              </button>
-              <span>
-                {page} / {pages}
+            <div className="flex items-center gap-2">
+              <span className="mr-1 tabular-nums">
+                {currentPage} / {pages}
               </span>
-              <button className={buttonClass} disabled={page === pages} onClick={() => setPage(page + 1)}>
-                Next
+              <button
+                className={`${buttonClass} size-9 min-h-0 p-0`}
+                type="button"
+                aria-label="Previous chapter page"
+                disabled={currentPage === 1}
+                onClick={() => setPage(currentPage - 1)}
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                className={`${buttonClass} size-9 min-h-0 p-0`}
+                type="button"
+                aria-label="Next chapter page"
+                disabled={currentPage === pages}
+                onClick={() => setPage(currentPage + 1)}
+              >
+                <ChevronRight size={16} />
               </button>
             </div>
           )}
-        </section>
-        <aside className="grid gap-4">
-          <section className="rounded-[15px] border border-line bg-card p-[22px] text-ink shadow-card max-[760px]:p-[17px]">
-            <h2>Automation</h2>
-            <div className="flex items-center justify-between gap-6 border-t border-line py-4">
-              <div>
-                <strong>Translate ahead</strong>
-                <div className="text-muted">Keep the next unread chapters ready.</div>
-              </div>
-              <button
-                className={`${switchClass} ${novel.autoTranslate ? 'bg-success after:translate-x-5' : ''}`}
-                aria-label="Toggle automatic translation"
-                onClick={() => void toggle('autoTranslate', !novel.autoTranslate)}
-              />
+        </footer>
+      </section>
+      <details className="group mt-4 overflow-hidden rounded-[15px] border border-line bg-card text-ink shadow-card">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-5 px-[22px] py-4 [&::-webkit-details-marker]:hidden max-[760px]:px-[17px]">
+          <span className="flex items-center gap-3">
+            <span className="grid size-9 place-items-center rounded-lg bg-paper text-muted">
+              <Settings2 size={17} />
+            </span>
+            <span>
+              <strong className="block">Automation</strong>
+              <span className="text-sm text-muted">
+                {Number(novel.autoTranslate) + Number(novel.autoCheck)} of 2 enabled
+              </span>
+            </span>
+          </span>
+          <ChevronDown className="shrink-0 text-muted transition-transform group-open:rotate-180" size={17} />
+        </summary>
+        <div className="grid grid-cols-2 border-t border-line max-[700px]:grid-cols-1">
+          <div className="flex items-center justify-between gap-6 border-r border-line px-[22px] py-5 max-[700px]:border-r-0 max-[700px]:border-b max-[760px]:px-[17px]">
+            <div>
+              <strong>Translate ahead</strong>
+              <div className="mt-1 text-sm text-muted">Keep the next unread chapters ready.</div>
             </div>
-            <div className="flex items-center justify-between gap-6 border-t border-line py-4">
-              <div>
-                <strong>Check for updates</strong>
-                <div className="text-muted">Poll the source on schedule.</div>
-              </div>
-              <button
-                className={`${switchClass} ${novel.autoCheck ? 'bg-success after:translate-x-5' : ''}`}
-                aria-label="Toggle update checks"
-                onClick={() => void toggle('autoCheck', !novel.autoCheck)}
-              />
+            <button
+              className={`${switchClass} ${novel.autoTranslate ? 'bg-success after:translate-x-5' : ''}`}
+              type="button"
+              role="switch"
+              aria-checked={novel.autoTranslate}
+              aria-label="Toggle automatic translation"
+              onClick={() => void toggle('autoTranslate', !novel.autoTranslate)}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-6 px-[22px] py-5 max-[760px]:px-[17px]">
+            <div>
+              <strong>Check for updates</strong>
+              <div className="mt-1 text-sm text-muted">Poll the source on schedule.</div>
             </div>
-          </section>
-        </aside>
-      </div>
+            <button
+              className={`${switchClass} ${novel.autoCheck ? 'bg-success after:translate-x-5' : ''}`}
+              type="button"
+              role="switch"
+              aria-checked={novel.autoCheck}
+              aria-label="Toggle update checks"
+              onClick={() => void toggle('autoCheck', !novel.autoCheck)}
+            />
+          </div>
+        </div>
+      </details>
       {editing && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-overlay p-5 backdrop-blur-lg">
           <div className="max-h-[90vh] w-[min(560px,100%)] overflow-auto rounded-2xl border border-line bg-card p-6 text-ink shadow-float">
