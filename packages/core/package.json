@@ -20,6 +20,7 @@
     "@novel/db": "workspace:*",
     "@novel/sources": "workspace:*",
     "@novel/translation": "workspace:*",
+    "jszip": "3.10.2",
     "sharp": "0.34.5",
     "zod": "4.3.6"
   },

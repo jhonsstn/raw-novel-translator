@@ -3,6 +3,7 @@ import {
   AppError,
   cancelJob,
   createSourceDefinition,
+  createNovelEpub,
   deleteSourceDefinition,
   getChapter,
   getCover,
@@ -108,6 +109,12 @@ const importSchema = z
     url: z.string().url(),
     includeStart: z.boolean(),
     title: z.string().trim().min(1, 'Novel title is required').max(300, 'Novel title must be 300 characters or fewer'),
+    author: z
+      .string()
+      .trim()
+      .max(300, 'Author name must be 300 characters or fewer')
+      .nullish()
+      .transform((value) => value || null),
     description: z
       .string()
       .trim()
@@ -252,6 +259,17 @@ async function dispatch(request: Request, context: RouteContext): Promise<Respon
   if (method === 'PUT' && path[0] === 'novels' && path.length === 3 && path[2] === 'progress') {
     const body = await jsonBody(request, progressSchema);
     return json(updateReadingProgress({ novelId: path[1]!, ...body }));
+  }
+  if (method === 'GET' && path[0] === 'novels' && path.length === 3 && path[2] === 'epub') {
+    const epub = await createNovelEpub(path[1]!);
+    return new Response(epub.bytes, {
+      headers: {
+        'Content-Type': 'application/epub+zip',
+        'Content-Disposition': `attachment; filename="${epub.filename}"`,
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
   }
   if (method === 'GET' && path[0] === 'novels' && path.length === 3 && path[2] === 'cover') {
     const cover = getCover(path[1]!);

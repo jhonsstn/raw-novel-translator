@@ -1,8 +1,8 @@
 'use client';
 import Link from 'next/link';
-import { ArrowLeft, BookOpen, Languages, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, Download, Languages, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 interface Chapter {
   id: string;
@@ -26,6 +26,7 @@ interface Novel {
   translatedCount: number;
   currentChapterId: string | null;
   coverUrl: string | null;
+  epubReady: boolean;
   chapters: Chapter[];
 }
 function isNovel(value: unknown): value is Novel {
@@ -34,6 +35,8 @@ function isNovel(value: unknown): value is Novel {
     typeof value === 'object' &&
     'id' in value &&
     'displayTitle' in value &&
+    'epubReady' in value &&
+    typeof value.epubReady === 'boolean' &&
     'chapters' in value &&
     Array.isArray(value.chapters)
   );
@@ -46,7 +49,9 @@ export function NovelClient({ novelId }: { novelId: string }) {
   const router = useRouter();
   const [novel, setNovel] = useState<Novel | null>(null);
   const [error, setError] = useState('');
+  const request = useRef<AbortController | null>(null);
   const [editing, setEditing] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [cover, setCover] = useState<File | null>(null);
@@ -55,18 +60,39 @@ export function NovelClient({ novelId }: { novelId: string }) {
   const [filter, setFilter] = useState<'all' | 'unread' | 'downloaded' | 'translated'>('all');
   const [page, setPage] = useState(1);
   const [author, setAuthor] = useState('');
-  const load = useCallback(async () => {
-    const response = await fetch(`/api/novels/${novelId}`, { cache: 'no-store' });
-    const value: unknown = await response.json();
-    if (response.ok && isNovel(value)) {
-      setNovel(value);
-      setTitle(value.displayTitle === value.sourceTitle ? '' : value.displayTitle);
-      setAuthor(value.author ?? '');
-      setDescription(value.description ?? '');
-    } else setError('Novel unavailable');
-  }, [novelId]);
+  const load = useCallback(
+    async (initial = false, force = false) => {
+      if (request.current) {
+        if (!force) return;
+        request.current.abort();
+      }
+      const controller = new AbortController();
+      request.current = controller;
+      try {
+        const response = await fetch(`/api/novels/${novelId}`, {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        const value: unknown = await response.json();
+        if (controller.signal.aborted) return;
+        if (response.ok && isNovel(value)) setNovel(value);
+        else if (initial) setError('Novel unavailable');
+      } catch {
+        if (initial && !controller.signal.aborted) setError('Novel unavailable');
+      } finally {
+        if (request.current === controller) request.current = null;
+      }
+    },
+    [novelId],
+  );
   useEffect(() => {
-    void load();
+    void load(true);
+    const timer = window.setInterval(() => void load(), 3000);
+    return () => {
+      clearInterval(timer);
+      request.current?.abort();
+      request.current = null;
+    };
   }, [load]);
   async function toggle(field: 'autoTranslate' | 'autoCheck', value: boolean) {
     const response = await fetch(`/api/novels/${novelId}`, {
@@ -107,6 +133,58 @@ export function NovelClient({ novelId }: { novelId: string }) {
     const response = await fetch(`/api/novels/${novelId}/check`, { method: 'POST' });
     setError(response.ok ? 'Update check queued.' : 'Could not queue update check');
   }
+  async function downloadEpub() {
+    setError('');
+    setDownloading(true);
+    try {
+      const response = await fetch(`/api/novels/${novelId}/epub`, { cache: 'no-store' });
+      if (!response.ok) {
+        let message = 'Could not generate EPUB.';
+        try {
+          const body: unknown = await response.json();
+          if (
+            body &&
+            typeof body === 'object' &&
+            'error' in body &&
+            body.error &&
+            typeof body.error === 'object' &&
+            'message' in body.error &&
+            typeof body.error.message === 'string'
+          )
+            message = body.error.message;
+        } catch {
+          // The fallback message covers non-JSON failures.
+        }
+        if (response.status === 409) await load(false, true);
+        setError(message);
+        return;
+      }
+      const disposition = response.headers.get('content-disposition') ?? '';
+      const match = disposition.match(/(?:^|;)\s*filename="([A-Za-z0-9._-]+)"(?:;|$)/i);
+      const filename = match?.[1] ?? 'novel-english.epub';
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      setError('Could not generate EPUB.');
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  function openMetadata() {
+    setTitle(novel?.displayTitle === novel?.sourceTitle ? '' : (novel?.displayTitle ?? ''));
+    setAuthor(novel?.author ?? '');
+    setDescription(novel?.description ?? '');
+    setCover(null);
+    setRemoveCover(false);
+    setEditing(true);
+  }
   async function translate(chapterId: string, regenerate = false) {
     const response = await fetch(`/api/chapters/${chapterId}/translation`, {
       method: 'POST',
@@ -126,7 +204,7 @@ export function NovelClient({ novelId }: { novelId: string }) {
         completed: chapter.readAt === null,
       }),
     });
-    if (response.ok) void load();
+    if (response.ok) void load(false, true);
     else setError('Reading status update failed');
   }
   const visible = useMemo(() => {
@@ -200,10 +278,23 @@ export function NovelClient({ novelId }: { novelId: string }) {
               <BookOpen size={16} /> Continue
             </Link>
           )}
+          <button
+            className={`${buttonClass} disabled:cursor-not-allowed disabled:opacity-50`}
+            disabled={!novel.epubReady || downloading}
+            aria-describedby={!novel.epubReady ? 'epub-availability' : undefined}
+            onClick={() => void downloadEpub()}
+          >
+            <Download size={16} /> {downloading ? 'Generating EPUB…' : 'Download EPUB'}
+          </button>
+          {!novel.epubReady && (
+            <span id="epub-availability" className="sr-only">
+              Available when all chapters have English translations.
+            </span>
+          )}
           <button className={buttonClass} onClick={() => void check()}>
             <RefreshCw size={16} /> Check updates
           </button>
-          <button className={buttonClass} onClick={() => setEditing(true)}>
+          <button className={buttonClass} onClick={openMetadata}>
             <Pencil size={16} /> Edit
           </button>
           <button className={`${buttonClass} text-danger`} aria-label="Delete novel" onClick={() => void remove()}>

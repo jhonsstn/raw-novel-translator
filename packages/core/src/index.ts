@@ -1,6 +1,7 @@
 export * from './activity.js';
 export * from './automation.js';
 export * from './errors.js';
+export * from './ebook.js';
 export * from './imports.js';
 export * from './jobs.js';
 export * from './library.js';

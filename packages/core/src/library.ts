@@ -27,6 +27,7 @@ interface ChapterListRow {
   paragraphs: string | null;
   translated_paragraphs: string | null;
   translated_model: string | null;
+  translated_target?: string | null;
   read_at: number | null;
   canonical_url: string;
   source_hash: string | null;
@@ -77,8 +78,8 @@ export function getNovel(novelId: string) {
   if (!novel) throw new AppError('NOVEL_NOT_FOUND', 'Novel not found', 404);
   const chapters = getDatabase()
     .sqlite.prepare(
-      `SELECT c.id,c.novel_id,c.ordinal,c.title,c.paragraphs,c.read_at,c.canonical_url,c.source_hash,t.paragraphs translated_paragraphs,t.model translated_model
-    FROM chapters c LEFT JOIN translations t ON t.chapter_id=c.id WHERE c.novel_id=? ORDER BY c.ordinal`,
+      `SELECT c.id,c.novel_id,c.ordinal,c.title,c.paragraphs,c.read_at,c.canonical_url,c.source_hash,t.paragraphs translated_paragraphs,t.model translated_model,t.target translated_target
+    FROM chapters c LEFT JOIN translations t ON t.chapter_id=c.id WHERE c.novel_id=? ORDER BY c.ordinal,c.id`,
     )
     .all(novelId) as ChapterListRow[];
   const progress =
@@ -89,6 +90,11 @@ export function getNovel(novelId: string) {
       .get(novelId) ?? null;
   return {
     ...novel,
+    epubReady:
+      chapters.length > 0 &&
+      chapters.every(
+        (chapter) => chapter.translated_paragraphs !== null && chapter.translated_target === 'en',
+      ),
     chapters: chapters.map((chapter) => ({
       id: chapter.id,
       ordinal: chapter.ordinal,
@@ -101,6 +107,70 @@ export function getNovel(novelId: string) {
     progress,
   };
 }
+export function getNovelEpubData(novelId: string): {
+  id: string;
+  title: string;
+  author: string | null;
+  cover: Buffer | null;
+  chapters: Array<{ id: string; ordinal: number; paragraphs: string[] }>;
+} {
+  const sqlite = getDatabase().sqlite;
+  return sqlite.transaction(() => {
+    const novel = sqlite
+      .prepare(
+        `SELECT n.id,COALESCE(n.custom_title,n.title) title,n.author,cv.image cover
+        FROM novels n LEFT JOIN novel_covers cv ON cv.novel_id=n.id WHERE n.id=?`,
+      )
+      .get(novelId) as
+      | { id: string; title: string; author: string | null; cover: Buffer | null }
+      | undefined;
+    if (!novel) throw new AppError('NOVEL_NOT_FOUND', 'Novel not found', 404);
+
+    const rows = sqlite
+      .prepare(
+        `SELECT c.id,c.ordinal,t.paragraphs translated_paragraphs,t.target translated_target
+        FROM chapters c LEFT JOIN translations t ON t.chapter_id=c.id
+        WHERE c.novel_id=? ORDER BY c.ordinal ASC,c.id ASC`,
+      )
+      .all(novelId) as Array<{
+      id: string;
+      ordinal: number;
+      translated_paragraphs: string | null;
+      translated_target: string | null;
+    }>;
+    if (
+      rows.length === 0 ||
+      rows.some((row) => row.translated_paragraphs === null || row.translated_target !== 'en')
+    )
+      throw new AppError(
+        'EPUB_NOT_READY',
+        'All chapters must have completed English translations before downloading an EPUB.',
+        409,
+      );
+
+    const chapters = rows.map((row) => {
+      let paragraphs: string[] | null;
+      try {
+        paragraphs = decodeParagraphs(row.translated_paragraphs);
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        throw new AppError('CORRUPT_CONTENT', 'Stored chapter content is invalid', 500);
+      }
+      if (!paragraphs || paragraphs.length === 0 || paragraphs.every((paragraph) => paragraph.trim() === ''))
+        throw new AppError('CORRUPT_CONTENT', 'Stored chapter content is invalid', 500);
+      return { id: row.id, ordinal: row.ordinal, paragraphs };
+    });
+
+    return {
+      id: novel.id,
+      title: novel.title,
+      author: novel.author,
+      cover: novel.cover,
+      chapters,
+    };
+  })();
+}
+
 
 export function getChapter(chapterId: string) {
   const row = getDatabase()

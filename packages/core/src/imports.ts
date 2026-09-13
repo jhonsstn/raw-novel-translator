@@ -34,6 +34,7 @@ export interface ImportInput {
   url: string;
   includeStart: boolean;
   title: string;
+  author?: string | null;
   description: string | null;
   chapterNumber: number;
 }
@@ -46,6 +47,11 @@ function normalizeImport(input: Record<string, unknown>): ImportInput {
     throw new AppError('INVALID_TITLE', 'Novel title is required');
   if (input.description !== null && input.description !== undefined && typeof input.description !== 'string')
     throw new AppError('INVALID_DESCRIPTION', 'Description must be text');
+  if (input.author !== null && input.author !== undefined && typeof input.author !== 'string')
+    throw new AppError('INVALID_AUTHOR', 'Author name must be text');
+  const author = input.author?.trim() || null;
+  if (author && Array.from(author).length > 300)
+    throw new AppError('INVALID_AUTHOR', 'Author name is limited to 300 characters');
   if (typeof input.chapterNumber !== 'number' || !Number.isSafeInteger(input.chapterNumber) || input.chapterNumber < 1)
     throw new AppError('INVALID_CHAPTER_NUMBER', 'Chapter number must be a positive safe integer');
   const text = normalizeNovelText({ customTitle: input.title, description: input.description ?? null });
@@ -53,6 +59,7 @@ function normalizeImport(input: Record<string, unknown>): ImportInput {
     url: input.url,
     includeStart: input.includeStart,
     title: text.customTitle!,
+    author,
     description: text.description,
     chapterNumber: input.chapterNumber,
   };
@@ -181,11 +188,12 @@ function saveDiscovery(
     if (existing) {
       sqlite
         .prepare(
-          'UPDATE novels SET title=?,custom_title=?,description=?,index_url=?,start_chapter_url=?,start_ordinal=?,include_start=?,updated_at=? WHERE id=?',
+          'UPDATE novels SET title=?,custom_title=?,author=COALESCE(?,author),description=?,index_url=?,start_chapter_url=?,start_ordinal=?,include_start=?,updated_at=? WHERE id=?',
         )
         .run(
           input.title,
           input.title,
+          input.author ?? null,
           input.description,
           novel.indexUrl,
           listed[boundary]!.url,
@@ -197,14 +205,15 @@ function saveDiscovery(
     } else {
       sqlite
         .prepare(
-          `INSERT INTO novels(id,source_id,source_novel_id,title,description,index_url,start_chapter_url,start_ordinal,include_start,auto_translate,auto_check,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,0,0,?,?)`,
+          `INSERT INTO novels(id,source_id,source_novel_id,title,author,description,index_url,start_chapter_url,start_ordinal,include_start,auto_translate,auto_check,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,0,0,?,?)`,
         )
         .run(
           novelId,
           adapter.id,
           novel.sourceNovelId,
           input.title,
+          input.author ?? null,
           input.description,
           novel.indexUrl,
           input.url,

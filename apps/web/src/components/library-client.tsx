@@ -30,6 +30,7 @@ export function LibraryClient() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [title, setTitle] = useState('');
+  const [author, setAuthor] = useState('');
   const [description, setDescription] = useState('');
   const [chapterNumber, setChapterNumber] = useState('');
   const [pending, setPending] = useState(false);
@@ -46,10 +47,15 @@ export function LibraryClient() {
     if (pending) return;
     setError('');
     const trimmedTitle = title.trim();
+    const trimmedAuthor = author.trim();
     const trimmedDescription = description.trim();
     const number = Number(chapterNumber);
     if (!trimmedTitle || trimmedTitle.length > 300) {
       setError('Enter a novel title of 1–300 characters.');
+      return;
+    }
+    if (trimmedAuthor.length > 300) {
+      setError('Author name must be 300 characters or fewer.');
       return;
     }
     if (trimmedDescription.length > 10000) {
@@ -80,6 +86,7 @@ export function LibraryClient() {
           url,
           includeStart,
           title: trimmedTitle,
+          author: trimmedAuthor || null,
           description: trimmedDescription || null,
           chapterNumber: number,
         }),
@@ -98,6 +105,7 @@ export function LibraryClient() {
       setOpen(false);
       setUrl('');
       setTitle('');
+      setAuthor('');
       setDescription('');
       setChapterNumber('');
       setIncludeStart(true);
@@ -211,7 +219,7 @@ export function LibraryClient() {
             </div>
             <form className="grid gap-4" onSubmit={submit} aria-busy={pending}>
               <p className="text-muted" id="import-metadata-help">
-                Enter the novel title and optional description yourself. Neither is scraped from the source.
+                Enter the novel title and optional author and description yourself. These are not scraped from the source.
               </p>
               <label className="grid gap-[7px] text-xs font-[720] text-ink">
                 Novel title
@@ -223,6 +231,17 @@ export function LibraryClient() {
                   disabled={pending}
                   aria-describedby="import-metadata-help"
                   onChange={(event) => setTitle(event.target.value)}
+                />
+              </label>
+              <label className="grid gap-[7px] text-xs font-[720] text-ink">
+                Author name (optional)
+                <input
+                  className="w-full rounded-[10px] border border-line bg-card px-[13px] py-[11px] text-ink outline-none transition duration-150 hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-accent)_18%,transparent)]"
+                  maxLength={300}
+                  value={author}
+                  disabled={pending}
+                  aria-describedby="import-metadata-help"
+                  onChange={(event) => setAuthor(event.target.value)}
                 />
               </label>
               <label className="grid gap-[7px] text-xs font-[720] text-ink">
