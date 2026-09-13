@@ -69,7 +69,7 @@ export function reconcileTranslationWindow(novelId: string): void {
       )
       .run(Date.now(), novelId);
   if (!enabled) return;
-  const baseRunAfter = Date.now();
+  const baseRunAfter = Date.now() - Math.max(window.length, 1);
   let queueOffset = 0;
   for (const chapter of window) {
     if (
