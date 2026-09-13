@@ -20,7 +20,9 @@ export interface ConfigurableSourceDefinition {
   indexPathTemplate: string;
   chapterLinkSelector: string;
   chapterTitleSelector: string;
+  chapterTitleExcludeSelector?: string | null;
   chapterContentSelector: string;
+  chapterContentStartSelector?: string | null;
   chapterContentEndSelector?: string | null;
   chapterContentExcludeSelector?: string | null;
 }
