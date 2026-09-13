@@ -12,6 +12,19 @@ export interface SourceAdapter {
   fetchChapter(chapter: ChapterRef, ctx: SourceContext): Promise<{ title: string; paragraphs: string[] }>;
 }
 
+export interface ConfigurableSourceDefinition {
+  id: string;
+  name: string;
+  siteUrl: string;
+  chapterPathPattern: string;
+  indexPathTemplate: string;
+  chapterLinkSelector: string;
+  chapterTitleSelector: string;
+  chapterContentSelector: string;
+  chapterContentEndSelector?: string | null;
+  chapterContentExcludeSelector?: string | null;
+}
+
 export class SourceError extends Error {
   constructor(public readonly code: string, message: string) { super(message); this.name = 'SourceError'; }
 }
