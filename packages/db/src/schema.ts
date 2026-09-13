@@ -96,6 +96,7 @@ export const translations = sqliteTable('translations', {
     .primaryKey()
     .references(() => chapters.id, { onDelete: 'cascade' }),
   target: text('target').notNull().default('en'),
+  translatedTitle: text('translated_title'),
   paragraphs: text('paragraphs', { mode: 'json' }).notNull().$type<string[]>(),
   sourceHash: text('source_hash').notNull(),
   model: text('model').notNull(),

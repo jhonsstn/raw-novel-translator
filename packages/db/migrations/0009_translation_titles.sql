@@ -1,0 +1,1 @@
+ALTER TABLE translations ADD COLUMN translated_title TEXT;

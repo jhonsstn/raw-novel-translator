@@ -4,6 +4,7 @@ import { AppError } from './errors.js';
 interface NovelListRow {
   id: string;
   title: string;
+  translated_title?: string | null;
   custom_title: string | null;
   author: string | null;
   description: string | null;
@@ -78,7 +79,7 @@ export function getNovel(novelId: string) {
   if (!novel) throw new AppError('NOVEL_NOT_FOUND', 'Novel not found', 404);
   const chapters = getDatabase()
     .sqlite.prepare(
-      `SELECT c.id,c.novel_id,c.ordinal,c.title,c.paragraphs,c.read_at,c.canonical_url,c.source_hash,t.paragraphs translated_paragraphs,t.model translated_model,t.target translated_target
+      `SELECT c.id,c.novel_id,c.ordinal,COALESCE(t.translated_title,c.title) title,c.title source_title,c.paragraphs,c.read_at,c.canonical_url,c.source_hash,t.paragraphs translated_paragraphs,t.model translated_model,t.target translated_target
     FROM chapters c LEFT JOIN translations t ON t.chapter_id=c.id WHERE c.novel_id=? ORDER BY c.ordinal,c.id`,
     )
     .all(novelId) as ChapterListRow[];
@@ -175,7 +176,7 @@ export function getNovelEpubData(novelId: string): {
 export function getChapter(chapterId: string) {
   const row = getDatabase()
     .sqlite.prepare(
-      `SELECT c.id,c.novel_id,c.ordinal,c.title,c.paragraphs,c.read_at,c.canonical_url,c.source_hash,t.paragraphs translated_paragraphs,t.model translated_model
+      `SELECT c.id,c.novel_id,c.ordinal,COALESCE(t.translated_title,c.title) title,c.paragraphs,c.read_at,c.canonical_url,c.source_hash,t.paragraphs translated_paragraphs,t.model translated_model
     FROM chapters c LEFT JOIN translations t ON t.chapter_id=c.id WHERE c.id=?`,
     )
     .get(chapterId) as ChapterListRow | undefined;

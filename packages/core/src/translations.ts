@@ -8,6 +8,7 @@ import { getProviderCredentials, getProviderSettings } from './settings.js';
 interface ChapterTranslationRow {
   id: string;
   novel_id: string;
+  title: string;
   paragraphs: string | null;
   source_hash: string | null;
 }
@@ -68,7 +69,7 @@ export async function handleTranslationJob(job: Job, signal: AbortSignal): Promi
   if (!chapterId) throw new AppError('INVALID_JOB', 'Translation job has no chapter', 500);
   const sqlite = getDatabase().sqlite;
   const chapter = sqlite
-    .prepare('SELECT id,novel_id,paragraphs,source_hash FROM chapters WHERE id=?')
+    .prepare('SELECT id,novel_id,title,paragraphs,source_hash FROM chapters WHERE id=?')
     .get(chapterId) as ChapterTranslationRow | undefined;
   if (!chapter?.source_hash) throw new AppError('CHAPTER_NOT_DOWNLOADED', 'Chapter has not been downloaded', 409);
   const paragraphs = stringParagraphs(chapter.paragraphs);
@@ -145,6 +146,15 @@ export async function handleTranslationJob(job: Job, signal: AbortSignal): Promi
       if (chunk.output_tokens === null) hasOutputTokens = false;
       else outputTokens += chunk.output_tokens;
     }
+    const titleResult = await translateChunk({
+      text: chapter.title,
+      model: provider.model,
+      baseUrl: provider.baseUrl,
+      apiKey: provider.apiKey,
+      timeoutMs: provider.timeoutSeconds * 1000,
+      signal,
+    });
+    const translatedTitle = titleResult.paragraphs.join(' ').trim();
     sqlite.transaction(() => {
       const current = sqlite.prepare('SELECT source_hash FROM chapters WHERE id=?').get(chapterId);
       const settings = getProviderSettings();
@@ -158,11 +168,12 @@ export async function handleTranslationJob(job: Job, signal: AbortSignal): Promi
         throw new AppError('TRANSLATION_STALE', 'Chapter or provider changed before publication', 409);
       sqlite
         .prepare(
-          `INSERT INTO translations(chapter_id,target,paragraphs,source_hash,model,base_url,prompt_version,completed_at,input_tokens,output_tokens) VALUES (?,'en',?,?,?,?,?,?,?,?)
-        ON CONFLICT(chapter_id) DO UPDATE SET paragraphs=excluded.paragraphs,source_hash=excluded.source_hash,model=excluded.model,base_url=excluded.base_url,prompt_version=excluded.prompt_version,completed_at=excluded.completed_at,input_tokens=excluded.input_tokens,output_tokens=excluded.output_tokens`,
+          `INSERT INTO translations(chapter_id,target,translated_title,paragraphs,source_hash,model,base_url,prompt_version,completed_at,input_tokens,output_tokens) VALUES (?,'en',?,?,?,?,?,?,?, ?,?)
+        ON CONFLICT(chapter_id) DO UPDATE SET translated_title=excluded.translated_title,paragraphs=excluded.paragraphs,source_hash=excluded.source_hash,model=excluded.model,base_url=excluded.base_url,prompt_version=excluded.prompt_version,completed_at=excluded.completed_at,input_tokens=excluded.input_tokens,output_tokens=excluded.output_tokens`,
         )
         .run(
           chapterId,
+          translatedTitle,
           JSON.stringify(output),
           chapter.source_hash,
           provider.model,
