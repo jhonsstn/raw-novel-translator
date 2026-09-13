@@ -19,7 +19,7 @@ services:
       APP_ORIGIN: ${APP_ORIGIN:-http://127.0.0.1:3000}
     volumes: *app-volumes
     ports:
-      - '127.0.0.1:${PORT:-3000}:3000'
+      - '0.0.0.0:${PORT:-3000}:3000'
     depends_on:
       migrate:
         condition: service_completed_successfully
