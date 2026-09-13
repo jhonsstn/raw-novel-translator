@@ -25,6 +25,6 @@ INSERT INTO source_definitions(
   created_at,updated_at
 ) VALUES (
   'piaotia','Piaotia','https://www.piaotia.com','^/html/(\d+)/(\d+)/(\d+)\.html$','/html/{1}/{2}/index.html','{1}/{2}','{3}',
-  '.centent ul li a','h1','a','body','.toplink + table','.bottomlink','翻页上AD开始','script,style,table,iframe,a',
+  '.centent ul li a','h1','a','body','.toplink ~ table','.bottomlink','翻页上AD开始','script,style,table,iframe,a',
   CAST(strftime('%s','now') AS INTEGER) * 1000,CAST(strftime('%s','now') AS INTEGER) * 1000
 );
