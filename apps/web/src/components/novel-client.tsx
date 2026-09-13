@@ -1,8 +1,9 @@
 'use client';
 import Link from 'next/link';
-import { ArrowLeft, BookOpen, Download, Languages, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, Download, Languages, Loader2, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useJobFeedback, isJobFeedbackActive } from '../lib/use-job-feedback';
 
 interface Chapter {
   id: string;
@@ -60,6 +61,8 @@ export function NovelClient({ novelId }: { novelId: string }) {
   const [filter, setFilter] = useState<'all' | 'unread' | 'downloaded' | 'translated'>('all');
   const [page, setPage] = useState(1);
   const [author, setAuthor] = useState('');
+  const { actions: jobActions, start: startJob } = useJobFeedback(`novel:${novelId}`);
+  const refreshedTranslations = useRef(new Set<string>());
   const load = useCallback(
     async (initial = false, force = false) => {
       if (request.current) {
@@ -94,6 +97,21 @@ export function NovelClient({ novelId }: { novelId: string }) {
       request.current = null;
     };
   }, [load]);
+  useEffect(() => {
+    let shouldRefresh = false;
+    for (const [key, action] of Object.entries(jobActions)) {
+      if (
+        key.startsWith('translation:') &&
+        action.state === 'succeeded' &&
+        action.jobId &&
+        !refreshedTranslations.current.has(action.jobId)
+      ) {
+        refreshedTranslations.current.add(action.jobId);
+        shouldRefresh = true;
+      }
+    }
+    if (shouldRefresh) void load(false, true);
+  }, [jobActions, load]);
   async function toggle(field: 'autoTranslate' | 'autoCheck', value: boolean) {
     const response = await fetch(`/api/novels/${novelId}`, {
       method: 'PATCH',
@@ -129,9 +147,8 @@ export function NovelClient({ novelId }: { novelId: string }) {
     if (response.ok) router.push('/');
     else setError('Delete failed');
   }
-  async function check() {
-    const response = await fetch(`/api/novels/${novelId}/check`, { method: 'POST' });
-    setError(response.ok ? 'Update check queued.' : 'Could not queue update check');
+  function check() {
+    return startJob('check-updates', `/api/novels/${novelId}/check`);
   }
   async function downloadEpub() {
     setError('');
@@ -185,13 +202,8 @@ export function NovelClient({ novelId }: { novelId: string }) {
     setRemoveCover(false);
     setEditing(true);
   }
-  async function translate(chapterId: string, regenerate = false) {
-    const response = await fetch(`/api/chapters/${chapterId}/translation`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ regenerate }),
-    });
-    setError(response.ok ? 'Translation queued.' : 'Could not queue translation');
+  function translate(chapterId: string, regenerate = false) {
+    return startJob(`translation:${chapterId}`, `/api/chapters/${chapterId}/translation`, { regenerate });
   }
   async function mark(chapter: Chapter) {
     const response = await fetch(`/api/novels/${novelId}/progress`, {
@@ -229,6 +241,21 @@ export function NovelClient({ novelId }: { novelId: string }) {
   const chapters = visible.slice((page - 1) * 50, page * 50);
   const continueId = novel.currentChapterId ?? novel.chapters.find((chapter) => chapter.fetched)?.id;
   const sourceUrl = novel.chapters[0]?.canonicalUrl;
+  const checkAction = jobActions['check-updates'];
+  const checkActive = isJobFeedbackActive(checkAction);
+  const checkLabel =
+    checkAction?.state === 'submitting'
+      ? 'Queueing…'
+      : checkAction?.state === 'queued'
+        ? 'Queued'
+        : checkAction?.state === 'running'
+          ? 'Checking…'
+          : checkAction?.state === 'succeeded'
+            ? 'Update check complete'
+            : 'Check updates';
+  const checkDetail = checkAction?.error ?? (checkAction?.state === 'cancelled' ? 'Update check cancelled.' : null);
+  const checkDetailIsError =
+    checkAction?.state === 'failed' || checkAction?.state === 'cancelled' || checkAction?.state === 'request-error';
   const buttonClass =
     'inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] border border-line bg-card px-3.5 text-[13px] font-bold text-ink transition-[transform,border-color,background-color,box-shadow] duration-150 enabled:hover:-translate-y-px enabled:hover:border-line-strong enabled:hover:bg-card-hover enabled:hover:shadow-button';
   const primaryButtonClass =
@@ -291,9 +318,30 @@ export function NovelClient({ novelId }: { novelId: string }) {
               Available when all chapters have English translations.
             </span>
           )}
-          <button className={buttonClass} onClick={() => void check()}>
-            <RefreshCw size={16} /> Check updates
-          </button>
+          <div className="flex flex-col items-start gap-1">
+            <button
+              className={`${buttonClass} disabled:cursor-not-allowed disabled:opacity-60`}
+              aria-busy={checkActive}
+              disabled={checkActive}
+              onClick={() => void check()}
+            >
+              {checkActive ? <Loader2 className="animate-spin" size={16} /> : <RefreshCw size={16} />}
+              {checkLabel}
+            </button>
+            {checkAction && !checkDetail && (
+              <span className="sr-only" role="status">
+                {checkLabel}
+              </span>
+            )}
+            {checkDetail && (
+              <span
+                className={`max-w-64 text-xs ${checkDetailIsError ? 'text-danger' : 'text-warning'}`}
+                role={checkDetailIsError ? 'alert' : 'status'}
+              >
+                {checkDetail}
+              </span>
+            )}
+          </div>
           <button className={buttonClass} onClick={openMetadata}>
             <Pencil size={16} /> Edit
           </button>
@@ -304,11 +352,8 @@ export function NovelClient({ novelId }: { novelId: string }) {
       </section>
       {error && (
         <div
-          className={`mb-[18px] rounded-[10px] border px-3.5 py-3 ${
-            error.endsWith('queued.')
-              ? 'border-[color-mix(in_srgb,var(--color-warning)_30%,var(--color-line))] bg-[color-mix(in_srgb,var(--color-warning)_10%,var(--color-card))] text-warning'
-              : 'border-[color-mix(in_srgb,var(--color-danger)_35%,var(--color-line))] bg-danger-soft text-danger'
-          }`}
+          className="mb-[18px] rounded-[10px] border border-[color-mix(in_srgb,var(--color-danger)_35%,var(--color-line))] bg-danger-soft px-3.5 py-3 text-danger"
+          role="alert"
         >
           {error}
         </div>
@@ -341,49 +386,89 @@ export function NovelClient({ novelId }: { novelId: string }) {
             </select>
           </div>
           <div className="mt-[15px] grid border-t border-line">
-            {chapters.map((chapter) => (
-              <div
-                className="grid grid-cols-[64px_1fr_auto] items-center gap-3.5 rounded-lg border-b border-line px-2.5 py-[15px] hover:bg-card-hover max-[760px]:grid-cols-[42px_1fr] max-[760px]:px-1 [&>button]:max-[760px]:col-start-2"
-                key={chapter.id}
-              >
-                <span className="text-xs text-muted tabular-nums">{String(chapter.ordinal).padStart(3, '0')}</span>
-                <div>
-                  <Link href={`/read/${chapter.id}`}>
-                    <strong>{chapter.title}</strong>
-                  </Link>
-                  <div className="mt-3.5 flex flex-wrap gap-[7px] text-[11px] text-muted">
-                    <span>
-                      <i
-                        className={`mr-1 inline-block size-[7px] rounded-full ${
-                          chapter.fetched
-                            ? 'bg-success shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-success)_14%,transparent)]'
-                            : 'bg-line-strong'
-                        }`}
-                      />
-                      {chapter.fetched ? 'Downloaded' : 'Queued'}
-                    </span>
-                    <span>
-                      <i
-                        className={`mr-1 inline-block size-[7px] rounded-full ${
-                          chapter.translated
-                            ? 'bg-success shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-success)_14%,transparent)]'
-                            : 'bg-line-strong'
-                        }`}
-                      />
-                      {chapter.translated ? 'English ready' : 'Chinese only'}
-                    </span>
-                    <button className={`${buttonClass} min-h-0 px-[7px] py-[3px]`} onClick={() => void mark(chapter)}>
-                      {chapter.readAt ? 'Unread' : 'Read'}
-                    </button>
+            {chapters.map((chapter) => {
+              const translationAction = jobActions[`translation:${chapter.id}`];
+              const translationActive = isJobFeedbackActive(translationAction);
+              const translationLabel =
+                translationAction?.state === 'submitting'
+                  ? 'Queueing…'
+                  : translationAction?.state === 'queued'
+                    ? 'Queued'
+                    : translationAction?.state === 'running'
+                      ? 'Translating…'
+                      : translationAction?.state === 'succeeded'
+                        ? 'Translation complete'
+                        : 'Translate';
+              const translationDetail =
+                translationAction?.error ??
+                (translationAction?.state === 'cancelled' ? 'Translation cancelled.' : null);
+              const translationDetailIsError =
+                translationAction?.state === 'failed' ||
+                translationAction?.state === 'cancelled' ||
+                translationAction?.state === 'request-error';
+              return (
+                <div
+                  className="grid grid-cols-[64px_1fr_auto] items-center gap-3.5 rounded-lg border-b border-line px-2.5 py-[15px] hover:bg-card-hover max-[760px]:grid-cols-[42px_1fr] max-[760px]:px-1 [&>button]:max-[760px]:col-start-2"
+                  key={chapter.id}
+                >
+                  <span className="text-xs text-muted tabular-nums">{String(chapter.ordinal).padStart(3, '0')}</span>
+                  <div>
+                    <Link href={`/read/${chapter.id}`}>
+                      <strong>{chapter.title}</strong>
+                    </Link>
+                    <div className="mt-3.5 flex flex-wrap gap-[7px] text-[11px] text-muted">
+                      <span>
+                        <i
+                          className={`mr-1 inline-block size-[7px] rounded-full ${
+                            chapter.fetched
+                              ? 'bg-success shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-success)_14%,transparent)]'
+                              : 'bg-line-strong'
+                          }`}
+                        />
+                        {chapter.fetched ? 'Downloaded' : 'Queued'}
+                      </span>
+                      <span>
+                        <i
+                          className={`mr-1 inline-block size-[7px] rounded-full ${
+                            chapter.translated
+                              ? 'bg-success shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-success)_14%,transparent)]'
+                              : 'bg-line-strong'
+                          }`}
+                        />
+                        {chapter.translated ? 'English ready' : 'Chinese only'}
+                      </span>
+                      <button className={`${buttonClass} min-h-0 px-[7px] py-[3px]`} onClick={() => void mark(chapter)}>
+                        {chapter.readAt ? 'Unread' : 'Read'}
+                      </button>
+                    </div>
+                    {translationAction && !translationDetail && (
+                      <span className="sr-only" role="status">
+                        {translationLabel}
+                      </span>
+                    )}
+                    {translationDetail && (
+                      <div
+                        className={`mt-2 text-xs ${translationDetailIsError ? 'text-danger' : 'text-warning'}`}
+                        role={translationDetailIsError ? 'alert' : 'status'}
+                      >
+                        {translationDetail}
+                      </div>
+                    )}
                   </div>
+                  {chapter.fetched && !chapter.translated && (
+                    <button
+                      className={`${buttonClass} disabled:cursor-not-allowed disabled:opacity-60`}
+                      aria-busy={translationActive}
+                      disabled={translationActive || translationAction?.state === 'succeeded'}
+                      onClick={() => void translate(chapter.id)}
+                    >
+                      {translationActive ? <Loader2 className="animate-spin" size={15} /> : <Languages size={15} />}
+                      {translationLabel}
+                    </button>
+                  )}
                 </div>
-                {chapter.fetched && !chapter.translated && (
-                  <button className={buttonClass} onClick={() => void translate(chapter.id)}>
-                    <Languages size={15} /> Translate
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
           {pages > 1 && (
             <div className="mt-4 flex flex-wrap items-center justify-center gap-[9px]">

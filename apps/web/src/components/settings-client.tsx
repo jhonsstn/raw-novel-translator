@@ -1,6 +1,7 @@
 'use client';
-import { CheckCircle2, Pause, Play, Plus, Save, Trash2, X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { CheckCircle2, Link, Loader2, Pause, Play, Plus, Save, Trash2, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useJobFeedback, isJobFeedbackActive } from '../lib/use-job-feedback';
 
 interface Provider {
   baseUrl: string | null;
@@ -132,10 +133,17 @@ export function SettingsClient() {
   const [theme, setTheme] = useState('light');
   const [sourceDraft, setSourceDraft] = useState<SourceDraft | null>(null);
   const [savingSource, setSavingSource] = useState(false);
+  const { actions: jobActions, start: startJob } = useJobFeedback('settings');
+  const refreshedSourceTests = useRef(new Set<string>());
+  const loadSources = useCallback(async () => {
+    const response = await fetch('/api/sources', { cache: 'no-store' });
+    const value: unknown = await response.json();
+    if (response.ok && isSources(value)) setSources(value);
+  }, []);
   const load = useCallback(async () => {
+    const sourcesRequest = loadSources();
     const responses = await Promise.all([
       fetch('/api/settings/provider', { cache: 'no-store' }),
-      fetch('/api/sources', { cache: 'no-store' }),
       fetch('/api/health', { cache: 'no-store' }),
       fetch('/api/novels', { cache: 'no-store' }),
     ]);
@@ -144,16 +152,31 @@ export function SettingsClient() {
       setProvider(values[0]);
       setChunkCharacters(String(values[0].chunkCharacters));
     }
-    if (responses[1]?.ok && isSources(values[1])) setSources(values[1]);
-    if (responses[2]?.ok && isHealth(values[2])) setHealth(values[2]);
-    if (responses[3]?.ok && isNovels(values[3])) setNovels(values[3]);
-  }, []);
+    if (responses[1]?.ok && isHealth(values[1])) setHealth(values[1]);
+    if (responses[2]?.ok && isNovels(values[2])) setNovels(values[2]);
+    await sourcesRequest;
+  }, [loadSources]);
   useEffect(() => {
     void load();
     setFontSize(Number(localStorage.getItem('reader-font-size')) || 20);
     setLineHeight(Number(localStorage.getItem('reader-line-height')) || 1.85);
     setTheme(localStorage.getItem('reader-theme') ?? 'light');
   }, [load]);
+  useEffect(() => {
+    let shouldRefresh = false;
+    for (const [key, action] of Object.entries(jobActions)) {
+      if (
+        key.startsWith('source-test:') &&
+        (action.state === 'succeeded' || action.state === 'failed' || action.state === 'cancelled') &&
+        action.jobId &&
+        !refreshedSourceTests.current.has(action.jobId)
+      ) {
+        refreshedSourceTests.current.add(action.jobId);
+        shouldRefresh = true;
+      }
+    }
+    if (shouldRefresh) void loadSources();
+  }, [jobActions, loadSources]);
   async function saveProvider(event: React.FormEvent) {
     event.preventDefault();
     if (!provider) return;
@@ -182,10 +205,8 @@ export function SettingsClient() {
       setMessage('Provider settings saved.');
     } else setError('Save failed');
   }
-  async function testProvider() {
-    const response = await fetch('/api/settings/provider/test', { method: 'POST' });
-    setMessage(response.ok ? 'Provider test queued. See Activity for the result.' : '');
-    setError(response.ok ? '' : 'Provider test failed');
+  function testProvider() {
+    return startJob('provider-test', '/api/settings/provider/test');
   }
   async function pause() {
     if (!provider) return;
@@ -210,10 +231,8 @@ export function SettingsClient() {
       setSources((items) => items.map((item) => (item.sourceId === updated.sourceId ? updated : item)));
     } else setError(apiError(value, 'Source update failed'));
   }
-  async function testSource(sourceId: string) {
-    const response = await fetch(`/api/sources/${sourceId}/check`, { method: 'POST' });
-    setMessage(response.ok ? `${sourceId} test queued.` : '');
-    setError(response.ok ? '' : 'Source test failed');
+  function testSource(sourceId: string) {
+    return startJob(`source-test:${sourceId}`, `/api/sources/${sourceId}/check`);
   }
   async function saveSource(event: React.FormEvent) {
     event.preventDefault();
@@ -285,6 +304,27 @@ export function SettingsClient() {
       </div>
     );
   const tabs: Tab[] = ['General', 'Provider', 'Sources', 'Automation', 'Reader'];
+  const providerTest = jobActions['provider-test'];
+  const providerTestActive = isJobFeedbackActive(providerTest);
+  const providerTestLabel =
+    providerTest?.state === 'submitting'
+      ? 'Queueing…'
+      : providerTest?.state === 'queued'
+        ? 'Queued'
+        : providerTest?.state === 'running'
+          ? 'Testing…'
+          : 'Test provider';
+  const providerTestDetail =
+    providerTest?.state === 'succeeded'
+      ? 'Provider test succeeded.'
+      : (providerTest?.error ?? (providerTest?.state === 'cancelled' ? 'Provider test cancelled.' : null));
+  const providerTestTerminal =
+    providerTest?.state === 'succeeded' ||
+    providerTest?.state === 'failed' ||
+    providerTest?.state === 'cancelled' ||
+    providerTest?.state === 'request-error';
+  const providerTestFailed =
+    providerTest?.state === 'failed' || providerTest?.state === 'cancelled' || providerTest?.state === 'request-error';
   return (
     <>
       <section className="mb-8 flex items-end justify-between gap-8 max-[760px]:flex-col max-[760px]:items-start max-[760px]:gap-5">
@@ -312,12 +352,18 @@ export function SettingsClient() {
         ))}
       </div>
       {message && (
-        <div className="mb-4 rounded-[10px] border border-[color-mix(in_srgb,var(--color-warning)_30%,var(--color-line))] bg-[color-mix(in_srgb,var(--color-warning)_10%,var(--color-card))] px-3.5 py-3 text-warning">
+        <div
+          className="mb-4 rounded-[10px] border border-[color-mix(in_srgb,var(--color-warning)_30%,var(--color-line))] bg-[color-mix(in_srgb,var(--color-warning)_10%,var(--color-card))] px-3.5 py-3 text-warning"
+          role="status"
+        >
           {message}
         </div>
       )}
       {error && (
-        <div className="mb-4 rounded-[10px] border border-[color-mix(in_srgb,var(--color-danger)_35%,var(--color-line))] bg-danger-soft px-3.5 py-3 text-danger">
+        <div
+          className="mb-4 rounded-[10px] border border-[color-mix(in_srgb,var(--color-danger)_35%,var(--color-line))] bg-danger-soft px-3.5 py-3 text-danger"
+          role="alert"
+        >
           {error}
         </div>
       )}
@@ -405,10 +451,38 @@ export function SettingsClient() {
             <button className={primaryButtonClass} type="submit">
               <Save size={16} /> Save provider
             </button>
-            <button className={buttonClass} type="button" onClick={() => void testProvider()}>
-              <CheckCircle2 size={16} /> Test provider
+            <button
+              className={`${buttonClass} disabled:cursor-not-allowed disabled:opacity-60`}
+              aria-busy={providerTestActive}
+              type="button"
+              disabled={providerTestActive}
+              onClick={() => void testProvider()}
+            >
+              {providerTestActive ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
+              {providerTestLabel}
             </button>
           </div>
+          <p className="text-xs text-muted">Tests saved settings; unsaved edits above are not included.</p>
+          {providerTest && !providerTestDetail && (
+            <span className="sr-only" role="status">
+              {providerTestLabel}
+            </span>
+          )}
+          {providerTestDetail && (
+            <div
+              className={`flex flex-wrap items-center gap-2 text-sm ${
+                providerTestFailed ? 'text-danger' : providerTest?.error ? 'text-warning' : 'text-success'
+              }`}
+              role={providerTestFailed ? 'alert' : 'status'}
+            >
+              <span>{providerTestDetail}</span>
+              {providerTestTerminal && (
+                <Link className="text-xs font-bold underline" href="/activity">
+                  View activity
+                </Link>
+              )}
+            </div>
+          )}
         </form>
       )}
       {tab === 'Sources' && (
@@ -575,55 +649,106 @@ export function SettingsClient() {
               </button>
             </form>
           )}
-          {sources.map((source) => (
-            <section className={panelClass} key={source.sourceId}>
-              <div className="flex flex-wrap items-start justify-between gap-[9px]">
-                <div>
-                  <strong>{source.name}</strong>
-                  <div className="text-muted">
-                    {source.siteUrl} · {source.sourceId}
+          {sources.map((source) => {
+            const sourceTest = jobActions[`source-test:${source.sourceId}`];
+            const sourceTestActive = isJobFeedbackActive(sourceTest);
+            const sourceTestLabel =
+              sourceTest?.state === 'submitting'
+                ? 'Queueing…'
+                : sourceTest?.state === 'queued'
+                  ? 'Queued'
+                  : sourceTest?.state === 'running'
+                    ? 'Testing…'
+                    : 'Test';
+            const sourceTestDetail =
+              sourceTest?.state === 'succeeded'
+                ? 'Source test succeeded.'
+                : (sourceTest?.error ?? (sourceTest?.state === 'cancelled' ? 'Source test cancelled.' : null));
+            const sourceTestTerminal =
+              sourceTest?.state === 'succeeded' ||
+              sourceTest?.state === 'failed' ||
+              sourceTest?.state === 'cancelled' ||
+              sourceTest?.state === 'request-error';
+            const sourceTestFailed =
+              sourceTest?.state === 'failed' ||
+              sourceTest?.state === 'cancelled' ||
+              sourceTest?.state === 'request-error';
+            return (
+              <section className={panelClass} key={source.sourceId}>
+                <div className="flex flex-wrap items-start justify-between gap-[9px]">
+                  <div>
+                    <strong>{source.name}</strong>
+                    <div className="text-muted">
+                      {source.siteUrl} · {source.sourceId}
+                    </div>
+                    <div className="text-muted">
+                      {source.lastError ??
+                        (source.lastCheckedAt
+                          ? `Checked ${new Date(source.lastCheckedAt).toLocaleString()}`
+                          : 'Not checked yet')}
+                    </div>
                   </div>
-                  <div className="text-muted">
-                    {source.lastError ??
-                      (source.lastCheckedAt
-                        ? `Checked ${new Date(source.lastCheckedAt).toLocaleString()}`
-                        : 'Not checked yet')}
+                  <div className="flex flex-wrap items-center gap-[9px]">
+                    <button className={buttonClass} onClick={() => setSourceDraft(draftFrom(source))}>
+                      Edit
+                    </button>
+                    <button
+                      className={`${buttonClass} disabled:cursor-not-allowed disabled:opacity-60`}
+                      aria-busy={sourceTestActive}
+                      disabled={sourceTestActive}
+                      onClick={() => void testSource(source.sourceId)}
+                    >
+                      {sourceTestActive && <Loader2 className="animate-spin" size={16} />}
+                      {sourceTestLabel}
+                    </button>
+                    <button
+                      className={buttonClass}
+                      aria-label={`Delete ${source.name}`}
+                      onClick={() => void removeSource(source)}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                    <button
+                      className={`${switchClass} ${source.enabled ? 'bg-success after:translate-x-5' : ''}`}
+                      aria-label={`Toggle ${source.name}`}
+                      onClick={() => void updateSource(source, { enabled: !source.enabled })}
+                    />
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-[9px]">
-                  <button className={buttonClass} onClick={() => setSourceDraft(draftFrom(source))}>
-                    Edit
-                  </button>
-                  <button className={buttonClass} onClick={() => void testSource(source.sourceId)}>
-                    Test
-                  </button>
-                  <button
-                    className={buttonClass}
-                    aria-label={`Delete ${source.name}`}
-                    onClick={() => void removeSource(source)}
+                {sourceTest && !sourceTestDetail && (
+                  <span className="sr-only" role="status">
+                    {sourceTestLabel}
+                  </span>
+                )}
+                {sourceTestDetail && (
+                  <div
+                    className={`mt-3 flex flex-wrap items-center gap-2 text-sm ${
+                      sourceTestFailed ? 'text-danger' : sourceTest?.error ? 'text-warning' : 'text-success'
+                    }`}
+                    role={sourceTestFailed ? 'alert' : 'status'}
                   >
-                    <Trash2 size={16} />
-                  </button>
-                  <button
-                    className={`${switchClass} ${source.enabled ? 'bg-success after:translate-x-5' : ''}`}
-                    aria-label={`Toggle ${source.name}`}
-                    onClick={() => void updateSource(source, { enabled: !source.enabled })}
+                    <span>{sourceTestDetail}</span>
+                    {sourceTestTerminal && (
+                      <Link className="text-xs font-bold underline" href="/activity">
+                        View activity
+                      </Link>
+                    )}
+                  </div>
+                )}
+                <label className={`${fieldClass} mt-3.5 max-w-60`}>
+                  Request interval (ms)
+                  <input
+                    className={inputClass}
+                    type="number"
+                    min="2000"
+                    step="500"
+                    value={source.requestIntervalMs}
+                    onChange={(event) => void updateSource(source, { requestIntervalMs: Number(event.target.value) })}
                   />
-                </div>
-              </div>
-              <label className={`${fieldClass} mt-3.5 max-w-60`}>
-                Request interval (ms)
-                <input
-                  className={inputClass}
-                  type="number"
-                  min="2000"
-                  step="500"
-                  value={source.requestIntervalMs}
-                  onChange={(event) => void updateSource(source, { requestIntervalMs: Number(event.target.value) })}
-                />
-              </label>
-            </section>
-          ))}
+                </label>
+              </section>
+            );
+          })}
         </div>
       )}
       {tab === 'Automation' && (
