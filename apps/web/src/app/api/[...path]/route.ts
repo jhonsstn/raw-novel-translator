@@ -123,7 +123,7 @@ async function metadataBody(request: Request) {
   const headers = new Headers(request.headers);
   headers.set('content-length', String(bytes.byteLength));
   const form = await new Request(request.url, { method: 'POST', headers, body: Uint8Array.from(bytes).buffer }).formData();
-  const allowed = new Set(['customTitle', 'useSourceTitle', 'description', 'coverAction', 'cover']);
+  const allowed = new Set(['customTitle', 'useSourceTitle', 'author', 'description', 'coverAction', 'cover']);
   const seen = new Set<string>();
   for (const [key] of form.entries()) {
     if (!allowed.has(key)) throw new AppError('INVALID_BODY', `Unrecognized metadata field: ${key}`);
@@ -132,11 +132,12 @@ async function metadataBody(request: Request) {
   }
   const useSourceTitle = form.get('useSourceTitle');
   const customTitle = form.get('customTitle');
+  const author = form.get('author');
   const description = form.get('description');
   const coverAction = form.get('coverAction');
   const file = form.get('cover');
   if (useSourceTitle !== 'true' && useSourceTitle !== 'false') throw new AppError('INVALID_BODY', 'useSourceTitle must be true or false');
-  if (typeof customTitle !== 'string' || typeof description !== 'string' || !['keep', 'remove', 'replace'].includes(String(coverAction))) throw new AppError('INVALID_BODY', 'Metadata fields are invalid');
+  if (typeof customTitle !== 'string' || typeof author !== 'string' || typeof description !== 'string' || !['keep', 'remove', 'replace'].includes(String(coverAction))) throw new AppError('INVALID_BODY', 'Metadata fields are invalid');
   if (useSourceTitle === 'true' && customTitle.trim()) throw new AppError('INVALID_BODY', 'A custom title cannot be combined with useSourceTitle');
   if (coverAction === 'replace') {
     if (!(file instanceof File)) throw new AppError('INVALID_BODY', 'A replacement cover file is required');
@@ -150,7 +151,7 @@ async function metadataBody(request: Request) {
     : coverAction === 'replace' && file instanceof File
       ? { action: 'replace' as const, bytes: new Uint8Array(await file.arrayBuffer()) }
       : { action: 'keep' as const };
-  return { customTitle: useSourceTitle === 'true' ? null : customTitle.trim() || null, description: description.trim() || null, cover };
+  return { customTitle: useSourceTitle === 'true' ? null : customTitle.trim() || null, author: author.trim() || null, description: description.trim() || null, cover };
 }
 
 async function dispatch(request: Request, context: RouteContext): Promise<Response> {

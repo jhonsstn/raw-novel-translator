@@ -47,14 +47,14 @@ it('uses manual metadata and numbering, preserving them when directory positions
   expect(novel.chapters.map(chapter => [chapter.ordinal, chapter.canonicalUrl])).toEqual([
     [42, 'https://www.piaotia.com/html/10/20/17.html'], [43, 'https://www.piaotia.com/html/10/20/600.html'],
   ]);
-  await metadata.updateNovelMetadata(id, { customTitle: 'Edited title', description: 'Edited description', cover: { action: 'keep' } });
+  await metadata.updateNovelMetadata(id, { customTitle: 'Edited title', author: '  Edited author  ', description: 'Edited description', cover: { action: 'keep' } });
   source.ids = ['888', '902', '17', '600', '3'];
   imports.queueCheckUpdates(id);
   const check = jobs.claimJob('source', Date.now())!;
   await imports.handleCheckUpdatesJob(check, new AbortController().signal);
   jobs.cancelJob(check.id);
   novel = library.getNovel(id);
-  expect(novel).toMatchObject({ displayTitle: 'Edited title', description: 'Edited description' });
+  expect(novel).toMatchObject({ displayTitle: 'Edited title', author: 'Edited author', description: 'Edited description' });
   expect(novel.chapters.map(chapter => chapter.ordinal)).toEqual([42, 43, 44]);
   expect(novel.chapters[2]!.canonicalUrl).toBe('https://www.piaotia.com/html/10/20/3.html');
 });

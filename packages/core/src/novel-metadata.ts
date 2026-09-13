@@ -4,7 +4,7 @@ import sharp from 'sharp';
 import { AppError } from './errors.js';
 
 export type CoverAction = { action: 'keep' } | { action: 'remove' } | { action: 'replace'; bytes: Uint8Array };
-export interface NovelMetadataInput { customTitle: string | null; description: string | null; cover: CoverAction }
+export interface NovelMetadataInput { customTitle: string | null; author: string | null; description: string | null; cover: CoverAction }
 interface NormalizedCover { bytes: Buffer; hash: string; width: number; height: number }
 
 function codePointLength(value: string): number { return Array.from(value).length; }
@@ -47,10 +47,12 @@ export async function updateNovelMetadata(novelId: string, input: NovelMetadataI
   const sqlite = getDatabase().sqlite;
   if (!sqlite.prepare('SELECT 1 FROM novels WHERE id=?').get(novelId)) throw new AppError('NOVEL_NOT_FOUND', 'Novel not found', 404);
   const text = normalizeNovelText(input);
+  const author = input.author?.trim() || null;
+  if (author && codePointLength(author) > 300) throw new AppError('INVALID_AUTHOR', 'Author name is limited to 300 characters');
   const cover = input.cover.action === 'replace' ? await normalizeCover(input.cover.bytes) : null;
   sqlite.transaction(() => {
     const now = Date.now();
-    const changed = sqlite.prepare('UPDATE novels SET custom_title=?,description=?,updated_at=? WHERE id=?').run(text.customTitle, text.description, now, novelId);
+    const changed = sqlite.prepare('UPDATE novels SET custom_title=?,author=?,description=?,updated_at=? WHERE id=?').run(text.customTitle, author, text.description, now, novelId);
     if (changed.changes !== 1) throw new AppError('NOVEL_NOT_FOUND', 'Novel not found', 404);
     if (input.cover.action === 'remove') sqlite.prepare('DELETE FROM novel_covers WHERE novel_id=?').run(novelId);
     if (cover) sqlite.prepare(`INSERT INTO novel_covers(novel_id,image,content_hash,width,height,updated_at) VALUES (?,?,?,?,?,?)
