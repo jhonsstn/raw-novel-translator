@@ -124,6 +124,7 @@ export function SettingsClient() {
   const [health, setHealth] = useState<Health | null>(null);
   const [novels, setNovels] = useState<Novel[]>([]);
   const [apiKey, setApiKey] = useState('');
+  const [chunkCharacters, setChunkCharacters] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [fontSize, setFontSize] = useState(20);
@@ -139,7 +140,10 @@ export function SettingsClient() {
       fetch('/api/novels', { cache: 'no-store' }),
     ]);
     const values: unknown[] = await Promise.all(responses.map((response) => response.json()));
-    if (responses[0]?.ok && isProvider(values[0])) setProvider(values[0]);
+    if (responses[0]?.ok && isProvider(values[0])) {
+      setProvider(values[0]);
+      setChunkCharacters(String(values[0].chunkCharacters));
+    }
     if (responses[1]?.ok && isSources(values[1])) setSources(values[1]);
     if (responses[2]?.ok && isHealth(values[2])) setHealth(values[2]);
     if (responses[3]?.ok && isNovels(values[3])) setNovels(values[3]);
@@ -154,6 +158,11 @@ export function SettingsClient() {
     event.preventDefault();
     if (!provider) return;
     setError('');
+    const chunkSize = Number(chunkCharacters);
+    if (!/^[0-9]+$/.test(chunkCharacters) || !Number.isSafeInteger(chunkSize) || chunkSize < 500 || chunkSize > 15000) {
+      setError('Chunk characters must be a whole number between 500 and 15,000.');
+      return;
+    }
     const response = await fetch('/api/settings/provider', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -161,13 +170,14 @@ export function SettingsClient() {
         baseUrl: provider.baseUrl,
         model: provider.model,
         timeoutSeconds: provider.timeoutSeconds,
-        chunkCharacters: provider.chunkCharacters,
+        chunkCharacters: chunkSize,
         ...(apiKey ? { apiKey } : {}),
       }),
     });
     const value: unknown = await response.json();
     if (response.ok && isProvider(value)) {
       setProvider(value);
+      setChunkCharacters(String(value.chunkCharacters));
       setApiKey('');
       setMessage('Provider settings saved.');
     } else setError('Save failed');
@@ -379,11 +389,15 @@ export function SettingsClient() {
               Chunk characters
               <input
                 className={inputClass}
-                type="number"
-                min="500"
-                max="15000"
-                value={provider.chunkCharacters}
-                onChange={(event) => setProvider({ ...provider, chunkCharacters: Number(event.target.value) })}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]+"
+                required
+                value={chunkCharacters}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (/^[0-9]*$/.test(value)) setChunkCharacters(value);
+                }}
               />
             </label>
           </div>
