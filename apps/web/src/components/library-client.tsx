@@ -20,7 +20,7 @@ export function LibraryClient() {
     if(trimmedDescription.length>10000){setError('Description must be 10,000 characters or fewer.');return;}
     if(!chapterNumber.trim()||!Number.isSafeInteger(number)||number<1){setError('Enter a positive whole chapter number no greater than 9,007,199,254,740,991.');return;}
     let parsed:URL;try{parsed=new URL(url);}catch{setError('Enter a valid chapter URL.');return;}
-    if(parsed.protocol!=='https:'||!['piaotia.com','www.piaotia.com'].includes(parsed.hostname)){setError('Enter a supported HTTPS piaotia.com chapter URL.');return;}
+    if(parsed.protocol!=='https:'){setError('Configured sources must use HTTPS chapter URLs.');return;}
     setPending(true);
     try{
       const response=await fetch('/api/imports',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,includeStart,title:trimmedTitle,description:trimmedDescription||null,chapterNumber:number})});
@@ -35,7 +35,7 @@ export function LibraryClient() {
     finally{setPending(false);}
   }
   return <>
-    <section className="hero"><div><div className="eyebrow">Your private shelf</div><h1>Stories, gathered and translated.</h1><p className="muted">Import a Chinese chapter URL, keep your place, and switch cleanly between English and 中文.</p></div><button className="btn primary" onClick={()=>setOpen(true)}><BookPlus size={17}/> Add novel</button></section>
+    <section className="hero"><div><div className="eyebrow">Your private shelf</div><h1>Stories, gathered and translated.</h1><p className="muted">Import a Chinese chapter URL from any configured source, keep your place, and switch cleanly between English and 中文.</p></div><button className="btn primary" onClick={()=>setOpen(true)}><BookPlus size={17}/> Add novel</button></section>
     <div className="toolbar" style={{marginBottom:22}}><label style={{position:'relative',maxWidth:380,width:'100%'}}><Search size={17} style={{position:'absolute',left:12,top:12,color:'#777'}}/><input className="input" style={{paddingLeft:38}} placeholder="Search title or author" value={search} onChange={event=>setSearch(event.target.value)}/></label></div>
     {message&&<p className="notice">{message}</p>}
     {novels.length===0?<div className="empty"><h2>No books on this shelf</h2><p>Import a chapter URL to create your first library entry.</p></div>:<div className="grid">{novels.map(novel=><Link className="card novel-card" href={`/novels/${novel.id}`} key={novel.id}><div className="cover">{novel.coverUrl&&<img src={novel.coverUrl} alt=""/>}<div className="cover-placeholder">{novel.displayTitle}</div></div><div className="card-body"><h3>{novel.displayTitle}</h3><div className="muted">{novel.author??'Unknown author'}</div><div className="meta"><span className="badge">{novel.downloadedCount}/{novel.chapterCount} downloaded</span><span className="badge">{novel.translatedCount} translated</span>{novel.currentChapterId&&<span className="badge">Continue reading</span>}</div></div></Link>)}</div>}
@@ -45,7 +45,7 @@ export function LibraryClient() {
         <p className="muted" id="import-metadata-help">Enter the novel title and optional description yourself. Neither is scraped from the source.</p>
         <label className="field">Novel title<input className="input" required maxLength={300} value={title} disabled={pending} aria-describedby="import-metadata-help" onChange={event=>setTitle(event.target.value)}/></label>
         <label className="field">Description (optional)<textarea className="textarea" maxLength={10000} rows={4} value={description} disabled={pending} aria-describedby="import-metadata-help" onChange={event=>setDescription(event.target.value)}/></label>
-        <label className="field">Chinese chapter URL<input className="input" type="url" required placeholder="https://www.piaotia.com/..." value={url} disabled={pending} onChange={event=>setUrl(event.target.value)}/></label>
+        <label className="field">Chinese chapter URL<input className="input" type="url" required placeholder="https://example.com/novel/chapter.html" value={url} disabled={pending} onChange={event=>setUrl(event.target.value)}/></label>
         <label className="field">Chapter number<input className="input" type="number" required min={1} max={Number.MAX_SAFE_INTEGER} step={1} value={chapterNumber} disabled={pending} aria-describedby="import-number-help" onChange={event=>setChapterNumber(event.target.value)}/></label>
         <p className="muted" id="import-number-help">This is the number of the chapter at the supplied URL (N). The next chapter is N+1. If you exclude the submitted chapter, importing starts at N+1.</p>
         <label style={{display:'flex',gap:10,alignItems:'center'}}><input type="checkbox" checked={includeStart} disabled={pending} onChange={event=>setIncludeStart(event.target.checked)}/> Include the submitted chapter</label>
