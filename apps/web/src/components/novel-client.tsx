@@ -141,67 +141,93 @@ export function NovelClient({ novelId }: { novelId: string }) {
           (filter === 'translated' && chapter.translated)),
     );
   }, [novel, query, filter]);
-  if (!novel) return <div className="empty">{error || 'Loading novel…'}</div>;
+  if (!novel)
+    return (
+      <div className="rounded-[15px] border border-dashed border-line-strong bg-card/60 px-6 py-16 text-center text-muted">
+        {error || 'Loading novel…'}
+      </div>
+    );
   const pages = Math.max(1, Math.ceil(visible.length / 50));
   const chapters = visible.slice((page - 1) * 50, page * 50);
   const continueId = novel.currentChapterId ?? novel.chapters.find((chapter) => chapter.fetched)?.id;
   const sourceUrl = novel.chapters[0]?.canonicalUrl;
+  const buttonClass =
+    'inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] border border-line bg-card px-3.5 text-[13px] font-bold text-ink transition-[transform,border-color,background-color,box-shadow] duration-150 enabled:hover:-translate-y-px enabled:hover:border-line-strong enabled:hover:bg-card-hover enabled:hover:shadow-button';
+  const primaryButtonClass =
+    'inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] border border-accent bg-accent px-3.5 text-[13px] font-bold text-white shadow-[0_7px_18px_color-mix(in_srgb,var(--color-accent)_22%,transparent)] transition-[transform,border-color,background-color] duration-150 enabled:hover:-translate-y-px enabled:hover:border-accent-hover enabled:hover:bg-accent-hover';
+  const inputClass =
+    'w-full rounded-[10px] border border-line bg-card px-[13px] py-[11px] text-ink outline-none transition-[border-color,box-shadow,background-color] duration-150 placeholder:text-muted/70 hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-accent)_18%,transparent)]';
+  const switchClass =
+    "h-6 w-11 shrink-0 rounded-full border-0 bg-line-strong p-[3px] after:block after:size-[18px] after:rounded-full after:bg-white after:shadow-[0_1px_3px_rgb(0_0_0/25%)] after:transition-transform after:duration-200 after:content-['']";
   return (
     <>
-      <Link className="btn" href="/">
+      <Link className={buttonClass} href="/">
         <ArrowLeft size={16} /> Library
       </Link>
-      <section className="hero" style={{ marginTop: 25, alignItems: 'center' }}>
-        <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
-          <div className="cover" style={{ width: 120, flex: '0 0 120px' }}>
-            {novel.coverUrl && <img src={novel.coverUrl} alt="" />}
-            <div className="cover-placeholder" style={{ fontSize: 15 }}>
+      <section className="mt-[25px] mb-8 flex items-center justify-between gap-8 max-[760px]:flex-col max-[760px]:items-start max-[760px]:gap-5">
+        <div className="flex max-w-[760px] items-center gap-6">
+          <div className="relative grid aspect-2/3 w-[120px] shrink-0 place-items-center overflow-hidden bg-cover-art text-white after:pointer-events-none after:absolute after:inset-0 after:bg-cover-overlay">
+            {novel.coverUrl && (
+              <img
+                className="absolute inset-0 z-10 size-full bg-paper-raised object-contain"
+                src={novel.coverUrl}
+                alt=""
+              />
+            )}
+            <div className="relative z-10 w-3/4 border border-white/40 px-4 py-5 text-center font-serif text-[15px] leading-tight">
               {novel.displayTitle}
             </div>
           </div>
           <div>
-            <div className="eyebrow">{novel.author ?? 'Unknown author'}</div>
+            <div className="mb-2.5 text-[11px] font-extrabold uppercase tracking-[.15em] text-accent-ink">
+              {novel.author ?? 'Unknown author'}
+            </div>
             <h1>{novel.displayTitle}</h1>
-            <p className="muted">
+            <p className="mt-[13px] max-w-[660px] text-muted">
               {novel.description ??
                 `${novel.downloadedCount}/${novel.chapterCount} downloaded · ${novel.translatedCount} translated`}
             </p>
             {sourceUrl && (
-              <a className="muted" href={sourceUrl} target="_blank" rel="noreferrer">
+              <a className="text-muted" href={sourceUrl} target="_blank" rel="noreferrer">
                 View source: {novel.sourceTitle}
               </a>
             )}
           </div>
         </div>
-        <div className="toolbar">
+        <div className="flex flex-wrap items-center gap-[9px]">
           {continueId && (
-            <Link className="btn primary" href={`/read/${continueId}`}>
+            <Link className={primaryButtonClass} href={`/read/${continueId}`}>
               <BookOpen size={16} /> Continue
             </Link>
           )}
-          <button className="btn" onClick={() => void check()}>
+          <button className={buttonClass} onClick={() => void check()}>
             <RefreshCw size={16} /> Check updates
           </button>
-          <button className="btn" onClick={() => setEditing(true)}>
+          <button className={buttonClass} onClick={() => setEditing(true)}>
             <Pencil size={16} /> Edit
           </button>
-          <button className="btn danger" aria-label="Delete novel" onClick={() => void remove()}>
+          <button className={`${buttonClass} text-danger`} aria-label="Delete novel" onClick={() => void remove()}>
             <Trash2 size={16} />
           </button>
         </div>
       </section>
       {error && (
-        <div className={error.endsWith('queued.') ? 'notice' : 'error'} style={{ marginBottom: 18 }}>
+        <div
+          className={`mb-[18px] rounded-[10px] border px-3.5 py-3 ${
+            error.endsWith('queued.')
+              ? 'border-[color-mix(in_srgb,var(--color-warning)_30%,var(--color-line))] bg-[color-mix(in_srgb,var(--color-warning)_10%,var(--color-card))] text-warning'
+              : 'border-[color-mix(in_srgb,var(--color-danger)_35%,var(--color-line))] bg-danger-soft text-danger'
+          }`}
+        >
           {error}
         </div>
       )}
-      <div className="split">
-        <section className="panel">
-          <div className="toolbar" style={{ justifyContent: 'space-between' }}>
+      <div className="grid grid-cols-[minmax(0,1.65fr)_minmax(260px,.65fr)] items-start gap-5 max-[960px]:grid-cols-1">
+        <section className="rounded-[15px] border border-line bg-card p-[22px] text-ink shadow-card max-[760px]:p-[17px]">
+          <div className="flex flex-wrap items-center justify-between gap-[9px]">
             <h2>Chapters</h2>
             <input
-              className="input"
-              style={{ maxWidth: 260 }}
+              className={`${inputClass} max-w-[260px]`}
               placeholder="Search chapters"
               value={query}
               onChange={(event) => {
@@ -210,8 +236,7 @@ export function NovelClient({ novelId }: { novelId: string }) {
               }}
             />
             <select
-              className="select"
-              style={{ maxWidth: 160 }}
+              className={`${inputClass} max-w-40`}
               value={filter}
               onChange={(event) => {
                 setFilter(chapterFilter(event.target.value));
@@ -224,30 +249,45 @@ export function NovelClient({ novelId }: { novelId: string }) {
               <option value="translated">Translated</option>
             </select>
           </div>
-          <div className="chapter-list" style={{ marginTop: 15 }}>
+          <div className="mt-[15px] grid border-t border-line">
             {chapters.map((chapter) => (
-              <div className="chapter-row" key={chapter.id}>
-                <span className="chapter-number">{String(chapter.ordinal).padStart(3, '0')}</span>
+              <div
+                className="grid grid-cols-[64px_1fr_auto] items-center gap-3.5 rounded-lg border-b border-line px-2.5 py-[15px] hover:bg-card-hover max-[760px]:grid-cols-[42px_1fr] max-[760px]:px-1 [&>button]:max-[760px]:col-start-2"
+                key={chapter.id}
+              >
+                <span className="text-xs text-muted tabular-nums">{String(chapter.ordinal).padStart(3, '0')}</span>
                 <div>
                   <Link href={`/read/${chapter.id}`}>
                     <strong>{chapter.title}</strong>
                   </Link>
-                  <div className="meta">
+                  <div className="mt-3.5 flex flex-wrap gap-[7px] text-[11px] text-muted">
                     <span>
-                      <i className={`status-dot ${chapter.fetched ? 'ready' : ''}`} />{' '}
+                      <i
+                        className={`mr-1 inline-block size-[7px] rounded-full ${
+                          chapter.fetched
+                            ? 'bg-success shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-success)_14%,transparent)]'
+                            : 'bg-line-strong'
+                        }`}
+                      />
                       {chapter.fetched ? 'Downloaded' : 'Queued'}
                     </span>
                     <span>
-                      <i className={`status-dot ${chapter.translated ? 'ready' : ''}`} />{' '}
+                      <i
+                        className={`mr-1 inline-block size-[7px] rounded-full ${
+                          chapter.translated
+                            ? 'bg-success shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-success)_14%,transparent)]'
+                            : 'bg-line-strong'
+                        }`}
+                      />
                       {chapter.translated ? 'English ready' : 'Chinese only'}
                     </span>
-                    <button className="btn" style={{ padding: '3px 7px' }} onClick={() => void mark(chapter)}>
+                    <button className={`${buttonClass} min-h-0 px-[7px] py-[3px]`} onClick={() => void mark(chapter)}>
                       {chapter.readAt ? 'Unread' : 'Read'}
                     </button>
                   </div>
                 </div>
                 {chapter.fetched && !chapter.translated && (
-                  <button className="btn" onClick={() => void translate(chapter.id)}>
+                  <button className={buttonClass} onClick={() => void translate(chapter.id)}>
                     <Languages size={15} /> Translate
                   </button>
                 )}
@@ -255,40 +295,40 @@ export function NovelClient({ novelId }: { novelId: string }) {
             ))}
           </div>
           {pages > 1 && (
-            <div className="toolbar" style={{ justifyContent: 'center', marginTop: 16 }}>
-              <button className="btn" disabled={page === 1} onClick={() => setPage(page - 1)}>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-[9px]">
+              <button className={buttonClass} disabled={page === 1} onClick={() => setPage(page - 1)}>
                 Previous
               </button>
               <span>
                 {page} / {pages}
               </span>
-              <button className="btn" disabled={page === pages} onClick={() => setPage(page + 1)}>
+              <button className={buttonClass} disabled={page === pages} onClick={() => setPage(page + 1)}>
                 Next
               </button>
             </div>
           )}
         </section>
-        <aside className="stack">
-          <section className="panel">
+        <aside className="grid gap-4">
+          <section className="rounded-[15px] border border-line bg-card p-[22px] text-ink shadow-card max-[760px]:p-[17px]">
             <h2>Automation</h2>
-            <div className="toggle">
+            <div className="flex items-center justify-between gap-6 border-t border-line py-4">
               <div>
                 <strong>Translate ahead</strong>
-                <div className="muted">Keep the next unread chapters ready.</div>
+                <div className="text-muted">Keep the next unread chapters ready.</div>
               </div>
               <button
-                className={`switch ${novel.autoTranslate ? 'on' : ''}`}
+                className={`${switchClass} ${novel.autoTranslate ? 'bg-success after:translate-x-5' : ''}`}
                 aria-label="Toggle automatic translation"
                 onClick={() => void toggle('autoTranslate', !novel.autoTranslate)}
               />
             </div>
-            <div className="toggle">
+            <div className="flex items-center justify-between gap-6 border-t border-line py-4">
               <div>
                 <strong>Check for updates</strong>
-                <div className="muted">Poll the source on schedule.</div>
+                <div className="text-muted">Poll the source on schedule.</div>
               </div>
               <button
-                className={`switch ${novel.autoCheck ? 'on' : ''}`}
+                className={`${switchClass} ${novel.autoCheck ? 'bg-success after:translate-x-5' : ''}`}
                 aria-label="Toggle update checks"
                 onClick={() => void toggle('autoCheck', !novel.autoCheck)}
               />
@@ -297,45 +337,45 @@ export function NovelClient({ novelId }: { novelId: string }) {
         </aside>
       </div>
       {editing && (
-        <div className="dialog-backdrop">
-          <div className="dialog">
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-overlay p-5 backdrop-blur-lg">
+          <div className="max-h-[90vh] w-[min(560px,100%)] overflow-auto rounded-2xl border border-line bg-card p-6 text-ink shadow-float">
+            <div className="mb-5 flex justify-between">
               <h2>Edit library details</h2>
-              <button className="btn" aria-label="Close" onClick={() => setEditing(false)}>
+              <button className={buttonClass} aria-label="Close" onClick={() => setEditing(false)}>
                 <X size={17} />
               </button>
             </div>
-            <form className="stack" onSubmit={metadata}>
-              <label className="field">
+            <form className="grid gap-4" onSubmit={metadata}>
+              <label className="grid gap-[7px] text-xs font-[720] text-ink">
                 Custom title
                 <input
-                  className="input"
+                  className={inputClass}
                   value={title}
                   placeholder={novel.sourceTitle}
                   onChange={(event) => setTitle(event.target.value)}
                 />
               </label>
-              <label className="field">
+              <label className="grid gap-[7px] text-xs font-[720] text-ink">
                 Author name (optional)
                 <input
-                  className="input"
+                  className={inputClass}
                   maxLength={300}
                   value={author}
                   onChange={(event) => setAuthor(event.target.value)}
                 />
               </label>
-              <label className="field">
+              <label className="grid gap-[7px] text-xs font-[720] text-ink">
                 Description
                 <textarea
-                  className="textarea"
+                  className={`${inputClass} min-h-30 resize-y`}
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                 />
               </label>
-              <label className="field">
+              <label className="grid gap-[7px] text-xs font-[720] text-ink">
                 Cover image
                 <input
-                  className="input"
+                  className={inputClass}
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
                   onChange={(event) => setCover(event.target.files?.[0] ?? null)}
@@ -349,7 +389,7 @@ export function NovelClient({ novelId }: { novelId: string }) {
                 />{' '}
                 Remove current cover
               </label>
-              <button className="btn primary" type="submit">
+              <button className={primaryButtonClass} type="submit">
                 Save details
               </button>
             </form>

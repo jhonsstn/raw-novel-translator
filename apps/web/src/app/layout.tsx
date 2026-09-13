@@ -17,7 +17,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </head>
       <body>
         <AppNavigation />
-        <div className="app-shell">{children}</div>
+        <div className="min-h-screen ml-[248px] max-[960px]:ml-[218px] max-[760px]:ml-0">{children}</div>
       </body>
     </html>
   );

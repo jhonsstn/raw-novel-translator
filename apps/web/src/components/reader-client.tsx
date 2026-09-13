@@ -177,55 +177,76 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
     await save(chapter.id, mode, ratio());
     router.push(`/novels/${novel.id}`);
   }
-  if (!chapter || !novel) return <div className="empty">{error || 'Opening chapter…'}</div>;
+  if (!chapter || !novel)
+    return (
+      <div className="rounded-[15px] border border-dashed border-line-strong bg-card/60 px-6 py-16 text-center text-muted">
+        {error || 'Opening chapter…'}
+      </div>
+    );
   const index = novel.chapters.findIndex((item) => item.id === chapter.id);
   const previous = novel.chapters[index - 1];
   const next = novel.chapters[index + 1];
   const paragraphs = mode === 'en' ? chapter.englishParagraphs : chapter.sourceParagraphs;
+  const buttonClass =
+    'inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] border border-line bg-card px-3.5 text-[13px] font-bold text-ink transition-[transform,border-color,background-color,box-shadow] duration-150 enabled:hover:-translate-y-px enabled:hover:border-line-strong enabled:hover:bg-card-hover enabled:hover:shadow-button';
+  const primaryButtonClass =
+    'inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] border border-accent bg-accent px-3.5 text-[13px] font-bold text-white shadow-[0_7px_18px_color-mix(in_srgb,var(--color-accent)_22%,transparent)] transition-[transform,border-color,background-color] duration-150 enabled:hover:-translate-y-px enabled:hover:border-accent-hover enabled:hover:bg-accent-hover';
+  const segmentClass =
+    'min-h-[34px] whitespace-nowrap rounded-lg border-0 bg-transparent px-[13px] text-[13px] font-[650] text-muted hover:text-ink';
   return (
-    <div className={`reader-shell ${dark ? 'reader-dark' : ''} ${focus ? 'reader-focus' : ''}`}>
-      <div className="reader-head">
-        <div className="reader-toolbar">
-          <button className="btn" onClick={() => void goContents()}>
+    <div className={focus ? 'reader-focus' : undefined}>
+      <div
+        className={`sticky z-10 -mx-8 -mt-[52px] mb-[26px] border-b border-line bg-[color-mix(in_srgb,var(--color-paper)_88%,transparent)] px-[max(32px,calc((100%_-_1240px)/2))] py-[13px] backdrop-blur-2xl max-[760px]:-mx-3.5 max-[760px]:-mt-8 max-[760px]:mb-5 max-[760px]:px-3 max-[760px]:py-2.5 ${
+          focus ? 'top-0 max-[760px]:mt-0' : 'top-0 max-[760px]:top-16'
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2.5 max-[760px]:justify-center">
+          <button className={buttonClass} onClick={() => void goContents()}>
             <List size={16} /> Contents
           </button>
-          <div className="reader-title">
+          <div className="grid text-center max-[760px]:order-first max-[760px]:w-full">
             <strong>{chapter.title}</strong>
-            <span>
+            <span className="text-[10px] uppercase tracking-[.13em] text-muted">
               Chapter {index + 1} of {novel.chapters.length}
             </span>
           </div>
-          <div className="toolbar">
+          <div className="flex flex-wrap items-center gap-[9px]">
             {previous && (
-              <button className="btn" onClick={() => void go(previous)} aria-label="Previous chapter">
+              <button className={buttonClass} onClick={() => void go(previous)} aria-label="Previous chapter">
                 <ArrowLeft size={16} />
               </button>
             )}
             {next && (
-              <button className="btn primary" onClick={() => void go(next, true)} aria-label="Next chapter">
+              <button className={primaryButtonClass} onClick={() => void go(next, true)} aria-label="Next chapter">
                 <ArrowRight size={16} />
               </button>
             )}
           </div>
         </div>
-        <div className="reader-options">
-          <div className="segmented" aria-label="Reading language">
+        <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2.5 max-[760px]:w-full">
+          <div
+            className="flex max-w-full overflow-x-auto rounded-[11px] border border-line bg-paper-raised p-[3px]"
+            aria-label="Reading language"
+          >
             <button
-              className={mode === 'en' ? 'active' : ''}
+              className={`${segmentClass} ${mode === 'en' ? 'bg-card text-ink-strong shadow-[0_1px_4px_rgb(0_0_0/10%)]' : ''}`}
               disabled={!chapter.englishParagraphs}
               onClick={() => chooseMode('en')}
             >
               English
             </button>
-            <button className={mode === 'source' ? 'active' : ''} onClick={() => chooseMode('source')}>
+            <button
+              className={`${segmentClass} ${mode === 'source' ? 'bg-card text-ink-strong shadow-[0_1px_4px_rgb(0_0_0/10%)]' : ''}`}
+              onClick={() => chooseMode('source')}
+            >
               中文
             </button>
           </div>
-          <button className="btn" onClick={() => void toggleRead()}>
+          <button className={buttonClass} onClick={() => void toggleRead()}>
             <Check size={15} /> {chapter.readAt ? 'Mark unread' : 'Mark read'}
           </button>
           <button
-            className="btn"
+            className={buttonClass}
             onClick={() => {
               const value = Math.max(16, fontSize - 1);
               setFontSize(value);
@@ -236,7 +257,7 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
             A−
           </button>
           <button
-            className="btn"
+            className={buttonClass}
             onClick={() => {
               const value = Math.min(28, fontSize + 1);
               setFontSize(value);
@@ -247,7 +268,7 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
             A+
           </button>
           <button
-            className="btn"
+            className={buttonClass}
             onClick={() => {
               const value = lineHeight === 1.85 ? 2.05 : 1.85;
               setLineHeight(value);
@@ -258,7 +279,7 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
             ↕
           </button>
           <button
-            className="btn"
+            className={buttonClass}
             onClick={() => {
               setDark(!dark);
               persistPreference('reader-theme', !dark ? 'dark' : 'light');
@@ -267,39 +288,50 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
           >
             {dark ? <Sun size={15} /> : <Moon size={15} />}
           </button>
-          <button className="btn" onClick={() => setFocus(!focus)}>
+          <button className={buttonClass} onClick={() => setFocus(!focus)}>
             Focus
           </button>
         </div>
       </div>
-      {error && <div className="notice reader-notice">{error}</div>}
-      <article className="reader-content" ref={contentRef} onScroll={scheduleSave} style={{ fontSize, lineHeight }}>
-        <div className="reader-language-label">
+      {error && (
+        <div className="mx-auto mb-[18px] w-[min(780px,100%)] rounded-[10px] border border-[color-mix(in_srgb,var(--color-warning)_30%,var(--color-line))] bg-[color-mix(in_srgb,var(--color-warning)_10%,var(--color-card))] px-3.5 py-3 text-warning">
+          {error}
+        </div>
+      )}
+      <article
+        className={`mx-auto h-[calc(100vh_-_260px)] min-h-[360px] w-[min(780px,100%)] overflow-auto rounded-[15px] border border-line p-[clamp(26px,5vw,60px)] font-serif shadow-card max-[760px]:h-[calc(100vh_-_350px)] max-[760px]:min-h-80 max-[760px]:px-[19px] max-[760px]:py-[26px] [&_p]:mb-[1.25em] ${
+          dark ? 'bg-[#171719] text-[#ededf0]' : 'bg-white text-[#222226]'
+        }`}
+        ref={contentRef}
+        onScroll={scheduleSave}
+        style={{ fontSize, lineHeight }}
+      >
+        <div className={`mb-7 text-[10px] uppercase tracking-[.13em] ${dark ? 'text-[#96969f]' : 'text-muted'}`}>
           {mode === 'en' ? `English${chapter.translatedModel ? ` · ${chapter.translatedModel}` : ''}` : '中文原文'}
         </div>
         {paragraphs?.map((paragraph, paragraphIndex) => <p key={paragraphIndex}>{paragraph}</p>) ??
           (mode === 'en' && chapter.sourceParagraphs ? (
-            <div className="empty">
+            <div className="rounded-[15px] border border-dashed border-line-strong bg-card/60 px-6 py-16 text-center text-muted">
               <p>No English translation yet.</p>
-              <button className="btn primary" onClick={() => void translate()}>
+              <button className={primaryButtonClass} onClick={() => void translate()}>
                 <Languages size={16} /> Translate chapter
               </button>
             </div>
           ) : (
-            <p className="muted">This chapter is still downloading.</p>
+            <p className="text-muted">This chapter is still downloading.</p>
           ))}
       </article>
-      <div className="reader-footer">
-        <button className="btn" disabled={!previous} onClick={() => previous && void go(previous)}>
+      <div className="mx-auto mt-5 flex w-[min(780px,100%)] flex-wrap items-center justify-between gap-2.5 max-[760px]:grid max-[760px]:grid-cols-2">
+        <button className={buttonClass} disabled={!previous} onClick={() => previous && void go(previous)}>
           <ArrowLeft size={16} /> Previous
         </button>
-        <button className="btn" onClick={() => void goContents()}>
+        <button className={buttonClass} onClick={() => void goContents()}>
           <List size={16} /> Contents
         </button>
-        <button className="btn" onClick={() => void toggleRead()}>
+        <button className={buttonClass} onClick={() => void toggleRead()}>
           <Check size={16} /> {chapter.readAt ? 'Mark unread' : 'Mark read'}
         </button>
-        <button className="btn primary" disabled={!next} onClick={() => next && void go(next, true)}>
+        <button className={primaryButtonClass} disabled={!next} onClick={() => next && void go(next, true)}>
           Next <ArrowRight size={16} />
         </button>
       </div>

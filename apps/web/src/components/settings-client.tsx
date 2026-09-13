@@ -106,6 +106,17 @@ function draftFrom(source: Source): SourceDraft {
   };
 }
 
+const buttonClass =
+  'inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] border border-line bg-card px-3.5 text-[13px] font-bold text-ink transition-[transform,border-color,background-color,box-shadow] duration-150 enabled:hover:-translate-y-px enabled:hover:border-line-strong enabled:hover:bg-card-hover enabled:hover:shadow-button';
+const primaryButtonClass =
+  'inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] border border-accent bg-accent px-3.5 text-[13px] font-bold text-white shadow-[0_7px_18px_color-mix(in_srgb,var(--color-accent)_22%,transparent)] transition-[transform,border-color,background-color] duration-150 enabled:hover:-translate-y-px enabled:hover:border-accent-hover enabled:hover:bg-accent-hover';
+const inputClass =
+  'w-full rounded-[10px] border border-line bg-card px-[13px] py-[11px] text-ink outline-none transition-[border-color,box-shadow,background-color] duration-150 placeholder:text-muted/70 hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-accent)_18%,transparent)]';
+const panelClass = 'rounded-[15px] border border-line bg-card p-[22px] text-ink shadow-card max-[760px]:p-[17px]';
+const fieldClass = 'grid gap-[7px] text-xs font-[720] text-ink';
+const switchClass =
+  "h-6 w-11 shrink-0 rounded-full border-0 bg-line-strong p-[3px] after:block after:size-[18px] after:rounded-full after:bg-white after:shadow-[0_1px_3px_rgb(0_0_0/25%)] after:transition-transform after:duration-200 after:content-['']";
+
 export function SettingsClient() {
   const [tab, setTab] = useState<Tab>('General');
   const [provider, setProvider] = useState<Provider | null>(null);
@@ -257,42 +268,63 @@ export function SettingsClient() {
           : value,
     });
   }
-  if (!provider) return <div className="empty">Loading settings…</div>;
+  if (!provider)
+    return (
+      <div className="rounded-[15px] border border-dashed border-line-strong bg-card/60 px-6 py-16 text-center text-muted">
+        Loading settings…
+      </div>
+    );
   const tabs: Tab[] = ['General', 'Provider', 'Sources', 'Automation', 'Reader'];
   return (
     <>
-      <section className="hero">
-        <div>
-          <div className="eyebrow">Configuration</div>
+      <section className="mb-8 flex items-end justify-between gap-8 max-[760px]:flex-col max-[760px]:items-start max-[760px]:gap-5">
+        <div className="max-w-[760px]">
+          <div className="mb-2.5 text-[11px] font-extrabold uppercase tracking-[.15em] text-accent-ink">
+            Configuration
+          </div>
           <h1>Settings</h1>
-          <p className="muted">Credentials stay encrypted at rest and never return to the browser.</p>
+          <p className="mt-[13px] max-w-[660px] text-muted">
+            Credentials stay encrypted at rest and never return to the browser.
+          </p>
         </div>
       </section>
-      <div className="segmented" style={{ width: 'fit-content', marginBottom: 22 }}>
+      <div className="mb-[22px] flex w-fit max-w-full overflow-x-auto rounded-[11px] border border-line bg-paper-raised p-[3px]">
         {tabs.map((item) => (
-          <button key={item} className={tab === item ? 'active' : ''} onClick={() => setTab(item)}>
+          <button
+            key={item}
+            className={`min-h-[34px] whitespace-nowrap rounded-lg border-0 bg-transparent px-[13px] text-[13px] font-[650] text-muted hover:text-ink ${
+              tab === item ? 'bg-card text-ink-strong shadow-[0_1px_4px_rgb(0_0_0/10%)]' : ''
+            }`}
+            onClick={() => setTab(item)}
+          >
             {item}
           </button>
         ))}
       </div>
       {message && (
-        <div className="notice" style={{ marginBottom: 16 }}>
+        <div className="mb-4 rounded-[10px] border border-[color-mix(in_srgb,var(--color-warning)_30%,var(--color-line))] bg-[color-mix(in_srgb,var(--color-warning)_10%,var(--color-card))] px-3.5 py-3 text-warning">
           {message}
         </div>
       )}
       {error && (
-        <div className="error" style={{ marginBottom: 16 }}>
+        <div className="mb-4 rounded-[10px] border border-[color-mix(in_srgb,var(--color-danger)_35%,var(--color-line))] bg-danger-soft px-3.5 py-3 text-danger">
           {error}
         </div>
       )}
       {tab === 'General' && (
-        <section className="panel">
+        <section className={panelClass}>
           <h2>Worker</h2>
           <p>
-            <i className={`status-dot ${health?.healthy ? 'ready' : ''}`} />{' '}
+            <i
+              className={`mr-1 inline-block size-[7px] rounded-full ${
+                health?.healthy
+                  ? 'bg-success shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-success)_14%,transparent)]'
+                  : 'bg-line-strong'
+              }`}
+            />{' '}
             {health?.healthy ? 'Healthy' : 'No recent heartbeat'}
           </p>
-          <div className="muted">
+          <div className="text-muted">
             {health?.heartbeatAt
               ? `Last heartbeat ${new Date(health.heartbeatAt).toLocaleString()}`
               : 'Start the worker process to handle imports and translations.'}
@@ -300,42 +332,42 @@ export function SettingsClient() {
         </section>
       )}
       {tab === 'Provider' && (
-        <form className="panel stack" onSubmit={saveProvider}>
+        <form className={`${panelClass} grid gap-4`} onSubmit={saveProvider}>
           <h2>Translation provider</h2>
-          <div className="form-grid">
-            <label className="field">
+          <div className="grid grid-cols-2 gap-3.5 max-[760px]:grid-cols-1">
+            <label className={fieldClass}>
               OpenAI-compatible base URL
               <input
-                className="input"
+                className={inputClass}
                 type="url"
                 required
                 value={provider.baseUrl ?? ''}
                 onChange={(event) => setProvider({ ...provider, baseUrl: event.target.value })}
               />
             </label>
-            <label className="field">
+            <label className={fieldClass}>
               Model
               <input
-                className="input"
+                className={inputClass}
                 required
                 value={provider.model ?? ''}
                 onChange={(event) => setProvider({ ...provider, model: event.target.value })}
               />
             </label>
-            <label className="field">
+            <label className={fieldClass}>
               API key
               <input
-                className="input"
+                className={inputClass}
                 type="password"
                 placeholder={provider.hasApiKey ? 'Stored — enter to replace' : 'Required'}
                 value={apiKey}
                 onChange={(event) => setApiKey(event.target.value)}
               />
             </label>
-            <label className="field">
+            <label className={fieldClass}>
               Timeout (seconds)
               <input
-                className="input"
+                className={inputClass}
                 type="number"
                 min="30"
                 max="600"
@@ -343,10 +375,10 @@ export function SettingsClient() {
                 onChange={(event) => setProvider({ ...provider, timeoutSeconds: Number(event.target.value) })}
               />
             </label>
-            <label className="field">
+            <label className={fieldClass}>
               Chunk characters
               <input
-                className="input"
+                className={inputClass}
                 type="number"
                 min="500"
                 max="15000"
@@ -355,51 +387,51 @@ export function SettingsClient() {
               />
             </label>
           </div>
-          <div className="toolbar">
-            <button className="btn primary" type="submit">
+          <div className="flex flex-wrap items-center gap-[9px]">
+            <button className={primaryButtonClass} type="submit">
               <Save size={16} /> Save provider
             </button>
-            <button className="btn" type="button" onClick={() => void testProvider()}>
+            <button className={buttonClass} type="button" onClick={() => void testProvider()}>
               <CheckCircle2 size={16} /> Test provider
             </button>
           </div>
         </form>
       )}
       {tab === 'Sources' && (
-        <div className="stack">
-          <div className="toolbar" style={{ justifyContent: 'space-between' }}>
+        <div className="grid gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-[9px]">
             <div>
               <h2>Scraping sources</h2>
-              <p className="muted">
+              <p className="text-muted">
                 Add sites without writing code. URL templates use regex capture groups such as {'{1}'}.
               </p>
             </div>
-            <button className="btn primary" onClick={() => setSourceDraft({ ...emptySource })}>
+            <button className={primaryButtonClass} onClick={() => setSourceDraft({ ...emptySource })}>
               <Plus size={16} /> Add source
             </button>
           </div>
           {sourceDraft && (
-            <form className="panel stack" onSubmit={saveSource}>
-              <div className="toolbar" style={{ justifyContent: 'space-between' }}>
+            <form className={`${panelClass} grid gap-4`} onSubmit={saveSource}>
+              <div className="flex flex-wrap items-center justify-between gap-[9px]">
                 <h2>{sourceDraft.sourceId ? 'Edit source' : 'New source'}</h2>
-                <button className="btn" type="button" onClick={() => setSourceDraft(null)}>
+                <button className={buttonClass} type="button" onClick={() => setSourceDraft(null)}>
                   <X size={16} /> Close
                 </button>
               </div>
-              <div className="form-grid">
-                <label className="field">
+              <div className="grid grid-cols-2 gap-3.5 max-[760px]:grid-cols-1">
+                <label className={fieldClass}>
                   Name
                   <input
-                    className="input"
+                    className={inputClass}
                     required
                     value={sourceDraft.name}
                     onChange={(e) => setDraft('name', e.target.value)}
                   />
                 </label>
-                <label className="field">
+                <label className={fieldClass}>
                   Site URL
                   <input
-                    className="input"
+                    className={inputClass}
                     type="url"
                     required
                     placeholder="https://example.com"
@@ -407,168 +439,168 @@ export function SettingsClient() {
                     onChange={(e) => setDraft('siteUrl', e.target.value)}
                   />
                 </label>
-                <label className="field">
+                <label className={fieldClass}>
                   Chapter URL pattern (regex)
                   <input
-                    className="input"
+                    className={inputClass}
                     required
                     placeholder="^/book/(\\d+)/(\\d+)\\.html$"
                     value={sourceDraft.chapterPathPattern}
                     onChange={(e) => setDraft('chapterPathPattern', e.target.value)}
                   />
                 </label>
-                <label className="field">
+                <label className={fieldClass}>
                   Index path template
                   <input
-                    className="input"
+                    className={inputClass}
                     required
                     placeholder="/book/{1}/index.html"
                     value={sourceDraft.indexPathTemplate}
                     onChange={(e) => setDraft('indexPathTemplate', e.target.value)}
                   />
                 </label>
-                <label className="field">
+                <label className={fieldClass}>
                   Novel ID template (optional)
                   <input
-                    className="input"
+                    className={inputClass}
                     placeholder="{1}"
                     value={sourceDraft.novelIdTemplate ?? ''}
                     onChange={(e) => setDraft('novelIdTemplate', e.target.value)}
                   />
                 </label>
-                <label className="field">
+                <label className={fieldClass}>
                   Chapter ID template (optional)
                   <input
-                    className="input"
+                    className={inputClass}
                     placeholder="{2}"
                     value={sourceDraft.chapterIdTemplate ?? ''}
                     onChange={(e) => setDraft('chapterIdTemplate', e.target.value)}
                   />
                 </label>
-                <label className="field">
+                <label className={fieldClass}>
                   Directory chapter-link selector
                   <input
-                    className="input"
+                    className={inputClass}
                     required
                     placeholder=".chapter-list a"
                     value={sourceDraft.chapterLinkSelector}
                     onChange={(e) => setDraft('chapterLinkSelector', e.target.value)}
                   />
                 </label>
-                <label className="field">
+                <label className={fieldClass}>
                   Chapter title selector
                   <input
-                    className="input"
+                    className={inputClass}
                     required
                     placeholder="h1"
                     value={sourceDraft.chapterTitleSelector}
                     onChange={(e) => setDraft('chapterTitleSelector', e.target.value)}
                   />
                 </label>
-                <label className="field">
+                <label className={fieldClass}>
                   Title exclude selector (optional)
                   <input
-                    className="input"
+                    className={inputClass}
                     placeholder="a,.badge"
                     value={sourceDraft.chapterTitleExcludeSelector ?? ''}
                     onChange={(e) => setDraft('chapterTitleExcludeSelector', e.target.value)}
                   />
                 </label>
-                <label className="field">
+                <label className={fieldClass}>
                   Content container selector
                   <input
-                    className="input"
+                    className={inputClass}
                     placeholder="#content"
                     value={sourceDraft.chapterContentSelector ?? 'body'}
                     onChange={(e) => setDraft('chapterContentSelector', e.target.value)}
                   />
                 </label>
-                <label className="field">
+                <label className={fieldClass}>
                   Content start selector (optional)
                   <input
-                    className="input"
+                    className={inputClass}
                     placeholder=".chapter-header"
                     value={sourceDraft.chapterContentStartSelector ?? ''}
                     onChange={(e) => setDraft('chapterContentStartSelector', e.target.value)}
                   />
                 </label>
-                <label className="field">
+                <label className={fieldClass}>
                   Content end selector (optional)
                   <input
-                    className="input"
+                    className={inputClass}
                     placeholder=".chapter-footer"
                     value={sourceDraft.chapterContentEndSelector ?? ''}
                     onChange={(e) => setDraft('chapterContentEndSelector', e.target.value)}
                   />
                 </label>
-                <label className="field">
+                <label className={fieldClass}>
                   Content end text (optional)
                   <input
-                    className="input"
+                    className={inputClass}
                     placeholder="Advertisement starts"
                     value={sourceDraft.chapterContentEndText ?? ''}
                     onChange={(e) => setDraft('chapterContentEndText', e.target.value)}
                   />
                 </label>
-                <label className="field">
+                <label className={fieldClass}>
                   Content exclude selector
                   <input
-                    className="input"
+                    className={inputClass}
                     placeholder="script,style,.ad"
                     value={sourceDraft.chapterContentExcludeSelector ?? ''}
                     onChange={(e) => setDraft('chapterContentExcludeSelector', e.target.value)}
                   />
                 </label>
               </div>
-              <p className="muted">
+              <p className="text-muted">
                 Use a content container for normal pages. Use both start and end selectors when the novel text sits
                 between page elements instead of inside one container.
               </p>
-              <button className="btn primary" type="submit" disabled={savingSource}>
+              <button className={primaryButtonClass} type="submit" disabled={savingSource}>
                 <Save size={16} /> {savingSource ? 'Saving…' : 'Save source'}
               </button>
             </form>
           )}
           {sources.map((source) => (
-            <section className="panel" key={source.sourceId}>
-              <div className="toolbar" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <section className={panelClass} key={source.sourceId}>
+              <div className="flex flex-wrap items-start justify-between gap-[9px]">
                 <div>
                   <strong>{source.name}</strong>
-                  <div className="muted">
+                  <div className="text-muted">
                     {source.siteUrl} · {source.sourceId}
                   </div>
-                  <div className="muted">
+                  <div className="text-muted">
                     {source.lastError ??
                       (source.lastCheckedAt
                         ? `Checked ${new Date(source.lastCheckedAt).toLocaleString()}`
                         : 'Not checked yet')}
                   </div>
                 </div>
-                <div className="toolbar">
-                  <button className="btn" onClick={() => setSourceDraft(draftFrom(source))}>
+                <div className="flex flex-wrap items-center gap-[9px]">
+                  <button className={buttonClass} onClick={() => setSourceDraft(draftFrom(source))}>
                     Edit
                   </button>
-                  <button className="btn" onClick={() => void testSource(source.sourceId)}>
+                  <button className={buttonClass} onClick={() => void testSource(source.sourceId)}>
                     Test
                   </button>
                   <button
-                    className="btn"
+                    className={buttonClass}
                     aria-label={`Delete ${source.name}`}
                     onClick={() => void removeSource(source)}
                   >
                     <Trash2 size={16} />
                   </button>
                   <button
-                    className={`switch ${source.enabled ? 'on' : ''}`}
+                    className={`${switchClass} ${source.enabled ? 'bg-success after:translate-x-5' : ''}`}
                     aria-label={`Toggle ${source.name}`}
                     onClick={() => void updateSource(source, { enabled: !source.enabled })}
                   />
                 </div>
               </div>
-              <label className="field" style={{ maxWidth: 240, marginTop: 14 }}>
+              <label className={`${fieldClass} mt-3.5 max-w-60`}>
                 Request interval (ms)
                 <input
-                  className="input"
+                  className={inputClass}
                   type="number"
                   min="2000"
                   step="500"
@@ -581,8 +613,8 @@ export function SettingsClient() {
         </div>
       )}
       {tab === 'Automation' && (
-        <div className="stack">
-          <button className="btn" style={{ width: 'fit-content' }} onClick={() => void pause()}>
+        <div className="grid gap-4">
+          <button className={`${buttonClass} w-fit`} onClick={() => void pause()}>
             {provider.automaticPaused ? (
               <>
                 <Play size={16} /> Resume all automatic jobs
@@ -594,20 +626,20 @@ export function SettingsClient() {
             )}
           </button>
           {novels.map((novel) => (
-            <section className="panel" key={novel.id}>
+            <section className={panelClass} key={novel.id}>
               <strong>{novel.displayTitle}</strong>
-              <div className="toggle">
+              <div className="flex items-center justify-between gap-6 border-t border-line py-4">
                 <span>Automatic translation</span>
                 <button
-                  className={`switch ${novel.autoTranslate ? 'on' : ''}`}
+                  className={`${switchClass} ${novel.autoTranslate ? 'bg-success after:translate-x-5' : ''}`}
                   aria-label={`Toggle translation for ${novel.displayTitle}`}
                   onClick={() => void updateNovel(novel, { autoTranslate: !novel.autoTranslate })}
                 />
               </div>
-              <div className="toggle">
+              <div className="flex items-center justify-between gap-6 border-t border-line py-4">
                 <span>Automatic update checks</span>
                 <button
-                  className={`switch ${novel.autoCheck ? 'on' : ''}`}
+                  className={`${switchClass} ${novel.autoCheck ? 'bg-success after:translate-x-5' : ''}`}
                   aria-label={`Toggle checks for ${novel.displayTitle}`}
                   onClick={() => void updateNovel(novel, { autoCheck: !novel.autoCheck })}
                 />
@@ -617,13 +649,13 @@ export function SettingsClient() {
         </div>
       )}
       {tab === 'Reader' && (
-        <section className="panel stack">
+        <section className={`${panelClass} grid gap-4`}>
           <h2>Reader defaults</h2>
-          <div className="form-grid">
-            <label className="field">
+          <div className="grid grid-cols-2 gap-3.5 max-[760px]:grid-cols-1">
+            <label className={fieldClass}>
               Font size
               <input
-                className="input"
+                className={inputClass}
                 type="number"
                 min="16"
                 max="28"
@@ -631,10 +663,10 @@ export function SettingsClient() {
                 onChange={(event) => setFontSize(Number(event.target.value))}
               />
             </label>
-            <label className="field">
+            <label className={fieldClass}>
               Line height
               <select
-                className="select"
+                className={inputClass}
                 value={lineHeight}
                 onChange={(event) => setLineHeight(Number(event.target.value))}
               >
@@ -643,15 +675,15 @@ export function SettingsClient() {
                 <option value="2.05">Spacious</option>
               </select>
             </label>
-            <label className="field">
+            <label className={fieldClass}>
               Theme
-              <select className="select" value={theme} onChange={(event) => setTheme(event.target.value)}>
+              <select className={inputClass} value={theme} onChange={(event) => setTheme(event.target.value)}>
                 <option value="light">Light</option>
                 <option value="dark">Dark</option>
               </select>
             </label>
           </div>
-          <button className="btn primary" style={{ width: 'fit-content' }} onClick={saveReader}>
+          <button className={`${primaryButtonClass} w-fit`} onClick={saveReader}>
             <Save size={16} /> Save reader defaults
           </button>
         </section>

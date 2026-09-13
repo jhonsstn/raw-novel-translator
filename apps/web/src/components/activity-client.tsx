@@ -80,6 +80,11 @@ async function requestJson(url: string, signal: AbortSignal, method = 'GET'): Pr
   return response.json();
 }
 
+const buttonClass =
+  'inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] border border-line bg-card px-3.5 text-[13px] font-bold text-ink transition-[transform,border-color,background-color,box-shadow] duration-150 enabled:hover:-translate-y-px enabled:hover:border-line-strong enabled:hover:bg-card-hover enabled:hover:shadow-button';
+const errorClass =
+  'rounded-[10px] border border-[color-mix(in_srgb,var(--color-danger)_35%,var(--color-line))] bg-danger-soft px-3.5 py-3 text-danger';
+
 function JobDetails({ item, refresh }: { item: Activity; refresh: number }) {
   const [events, setEvents] = useState<JobEvent[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -146,8 +151,11 @@ function JobDetails({ item, refresh }: { item: Activity; refresh: number }) {
     }
   }
   return (
-    <div className="activity-details" id={`job-details-${item.id}`}>
-      <dl className="activity-metadata">
+    <div
+      className="col-span-full rounded-[11px] border border-line bg-paper-raised p-[17px] [&_button:disabled]:cursor-wait"
+      id={`job-details-${item.id}`}
+    >
+      <dl className="mb-5 flex flex-wrap gap-x-7 gap-y-3.5 [&>div]:min-w-0 [&_dt]:text-[11px] [&_dt]:font-bold [&_dt]:text-muted [&_dd]:mt-1">
         <div>
           <dt>Job ID</dt>
           <dd>
@@ -167,11 +175,11 @@ function JobDetails({ item, refresh }: { item: Activity; refresh: number }) {
           <dd>{new Date(item.updatedAt).toLocaleString()}</dd>
         </div>
       </dl>
-      <div className="toolbar">
+      <div className="flex flex-wrap items-center gap-[9px]">
         <strong>Event timeline</strong>
-        <span className="muted">Most recent 200 events, oldest first</span>
+        <span className="text-muted">Most recent 200 events, oldest first</span>
         <button
-          className="btn"
+          className={buttonClass}
           aria-label={copied ? 'Error log copied' : 'Copy error log'}
           title={copied ? 'Copied' : 'Copy error log'}
           disabled={events === null || (!item.error && !events.some((event) => event.level === 'error'))}
@@ -181,36 +189,47 @@ function JobDetails({ item, refresh }: { item: Activity; refresh: number }) {
         </button>
       </div>
       {copyError && (
-        <div className="error" role="alert">
+        <div className={`${errorClass} mt-3`} role="alert">
           {copyError}
         </div>
       )}
       {error && (
-        <div className="error" role="alert">
+        <div className={`${errorClass} mt-3`} role="alert">
           Could not load job events: {error} {events && 'Showing previously loaded events.'}
-          <button className="btn" disabled={loading} onClick={() => void load()}>
+          <button className={`${buttonClass} m-2`} disabled={loading} onClick={() => void load()}>
             Retry loading
           </button>
         </div>
       )}
       {events?.length === 0 && (
-        <p className="muted">
+        <p className="text-muted">
           No recorded events for this job. Historical jobs have no diagnostic logs; retry a failed job to capture
           diagnostics for a new attempt.
         </p>
       )}
       {!!events?.length && (
-        <ol className="activity-events">
+        <ol className="mt-3.5 max-h-[480px] list-none overflow-auto overscroll-contain p-0">
           {events.map((event) => (
-            <li key={event.id} className={`activity-event activity-event-${event.level}`}>
-              <div className="toolbar muted">
+            <li
+              key={event.id}
+              className={`rounded-r-lg border-l-[3px] bg-card p-3 [&+&]:mt-[9px] ${
+                event.level === 'error' ? 'border-danger' : 'border-line-strong'
+              }`}
+            >
+              <div className="flex flex-wrap items-center gap-[9px] text-[11px] text-muted">
                 <time dateTime={new Date(event.createdAt).toISOString()}>
                   {new Date(event.createdAt).toLocaleString()}
                 </time>
-                <span className={`job-status ${event.level === 'error' ? 'failed' : ''}`}>{event.level}</span>
+                <span
+                  className={`text-[10px] font-[850] uppercase tracking-[.11em] ${
+                    event.level === 'error' ? 'text-danger' : 'text-muted'
+                  }`}
+                >
+                  {event.level}
+                </span>
                 <span>Attempt {event.attempt}</span>
               </div>
-              <pre className="activity-log">
+              <pre className="mt-2 wrap-anywhere text-xs leading-relaxed whitespace-pre-wrap break-words select-text">
                 {event.message}
                 {event.details ? `\n${event.details}` : ''}
               </pre>
@@ -325,15 +344,19 @@ export function ActivityClient() {
   const visible = filtered.slice((currentPage - 1) * 50, currentPage * 50);
   return (
     <>
-      <section className="hero">
-        <div>
-          <div className="eyebrow">Background work</div>
+      <section className="mb-8 flex items-end justify-between gap-8 max-[760px]:flex-col max-[760px]:items-start max-[760px]:gap-5">
+        <div className="max-w-[760px]">
+          <div className="mb-2.5 text-[11px] font-extrabold uppercase tracking-[.15em] text-accent-ink">
+            Background work
+          </div>
           <h1>Activity</h1>
-          <p className="muted">Imports, downloads, checks, and translations update here while the worker runs.</p>
+          <p className="mt-[13px] max-w-[660px] text-muted">
+            Imports, downloads, checks, and translations update here while the worker runs.
+          </p>
         </div>
-        <div className="toolbar">
+        <div className="flex flex-wrap items-center gap-[9px]">
           <select
-            className="select"
+            className="w-full rounded-[10px] border border-line bg-card px-[13px] py-[11px] text-ink outline-none transition duration-150 hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-accent)_18%,transparent)]"
             aria-label="Filter jobs by status"
             value={filter}
             onChange={(event) => {
@@ -348,51 +371,66 @@ export function ActivityClient() {
             <option value="succeeded">Succeeded</option>
             <option value="cancelled">Cancelled</option>
           </select>
-          <button className="btn" onClick={() => void load(true)}>
+          <button className={buttonClass} onClick={() => void load(true)}>
             <RefreshCw size={16} /> Refresh
           </button>
         </div>
       </section>
       {activityError && (
-        <div className="error activity-notice" role="alert">
+        <div className={`${errorClass} mb-[18px]`} role="alert">
           Could not load activity: {activityError} {loaded && 'Showing previously loaded jobs.'} Use Refresh to try
           again.
         </div>
       )}
       {healthError && (
-        <div className="error activity-notice" role="alert">
+        <div className={`${errorClass} mb-[18px]`} role="alert">
           Could not check worker health: {healthError}
         </div>
       )}
       {!healthy && !healthError && (
-        <div className="error activity-notice">
+        <div className={`${errorClass} mb-[18px]`}>
           Worker offline: queued jobs will not run until a recent heartbeat is recorded.
         </div>
       )}
-      <section className="panel">
+      <section className="rounded-[15px] border border-line bg-card p-[22px] text-ink shadow-card max-[760px]:p-[17px]">
         {visible.length === 0 ? (
           loaded ? (
-            <div className="empty">No matching jobs.</div>
+            <div className="rounded-[15px] border border-dashed border-line-strong bg-card/60 px-6 py-16 text-center text-muted">
+              No matching jobs.
+            </div>
           ) : null
         ) : (
           visible.map((item) => (
-            <div className="activity-row" key={item.id}>
+            <div
+              className="grid grid-cols-[130px_minmax(0,1fr)_170px] items-center gap-4 border-b border-line px-1 py-4 last:border-b-0 max-[760px]:grid-cols-[1fr_auto] [&>*]:min-w-0 [&>*]:wrap-anywhere [&>*:nth-child(2)]:max-[760px]:col-span-full [&>*:nth-child(2)]:max-[760px]:row-start-2"
+              key={item.id}
+            >
               <div>
-                <span className={`job-status ${item.status}`}>{item.status}</span>
-                <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                  {new Date(item.createdAt).toLocaleString()}
-                </div>
+                <span
+                  className={`text-[10px] font-[850] uppercase tracking-[.11em] ${
+                    item.status === 'succeeded'
+                      ? 'text-success'
+                      : item.status === 'failed'
+                        ? 'text-danger'
+                        : item.status === 'running'
+                          ? 'text-warning'
+                          : 'text-muted'
+                  }`}
+                >
+                  {item.status}
+                </span>
+                <div className="mt-1 text-xs text-muted">{new Date(item.createdAt).toLocaleString()}</div>
               </div>
               <div>
                 <strong>{item.kind.replaceAll('_', ' ')}</strong>
-                <div className="muted">
+                <div className="text-muted">
                   {item.chapterTitle ?? item.novelTitle ?? item.origin}
                   {item.error ? ` · ${item.error}` : ''}
                 </div>
               </div>
-              <div className="toolbar activity-actions">
+              <div className="flex flex-wrap items-center justify-end gap-[9px] [&_button:disabled]:cursor-wait">
                 <button
-                  className="btn"
+                  className={buttonClass}
                   aria-expanded={expanded.has(item.id)}
                   aria-controls={`job-details-${item.id}`}
                   onClick={() =>
@@ -408,7 +446,7 @@ export function ActivityClient() {
                 </button>
                 {(item.status === 'queued' || item.status === 'running') && (
                   <button
-                    className="btn danger"
+                    className={`${buttonClass} text-danger`}
                     disabled={pending.has(item.id)}
                     onClick={() => void act(item.id, 'cancel')}
                     title="Cancel"
@@ -418,18 +456,22 @@ export function ActivityClient() {
                   </button>
                 )}
                 {item.status === 'failed' && (
-                  <button className="btn" disabled={pending.has(item.id)} onClick={() => void act(item.id, 'retry')}>
+                  <button
+                    className={buttonClass}
+                    disabled={pending.has(item.id)}
+                    onClick={() => void act(item.id, 'retry')}
+                  >
                     <RotateCcw size={16} /> Retry
                   </button>
                 )}
                 {pending.has(item.id) && (
-                  <span className="muted" role="status">
+                  <span className="text-muted" role="status">
                     Updating job…
                   </span>
                 )}
               </div>
               {actionErrors[item.id] && (
-                <div className="error activity-action-error" role="alert">
+                <div className={`${errorClass} col-span-full`} role="alert">
                   {actionErrors[item.id]}
                 </div>
               )}
@@ -438,14 +480,14 @@ export function ActivityClient() {
           ))
         )}
         {pages > 1 && (
-          <div className="toolbar" style={{ justifyContent: 'center', marginTop: 16 }}>
-            <button className="btn" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-[9px]">
+            <button className={buttonClass} disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>
               Previous
             </button>
             <span>
               {currentPage} / {pages}
             </span>
-            <button className="btn" disabled={currentPage === pages} onClick={() => setPage(currentPage + 1)}>
+            <button className={buttonClass} disabled={currentPage === pages} onClick={() => setPage(currentPage + 1)}>
               Next
             </button>
           </div>
