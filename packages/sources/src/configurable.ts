@@ -49,6 +49,21 @@ function sourceChapterId(definition: ConfigurableSourceDefinition, match: RegExp
   return template ? expandTemplate(template, match) : canonical;
 }
 
+function validateSelectors(definition: ConfigurableSourceDefinition): void {
+  const $ = cheerio.load('<html><body><main></main></body></html>');
+  const selectors = [
+    definition.chapterLinkSelector,
+    definition.chapterTitleSelector,
+    definition.chapterTitleExcludeSelector,
+    definition.chapterContentSelector,
+    definition.chapterContentStartSelector,
+    definition.chapterContentEndSelector,
+    definition.chapterContentExcludeSelector,
+  ].filter((value): value is string => Boolean(value?.trim()));
+  try { for (const selector of selectors) $(selector); }
+  catch { throw new SourceError('INVALID_SOURCE_CONFIG', 'One or more CSS selectors are invalid'); }
+}
+
 export function parseConfigurableDirectory(definition: ConfigurableSourceDefinition, html: string, indexUrl: string): ChapterRef[] {
   const $ = load(html);
   const base = new URL(indexUrl);
@@ -108,13 +123,16 @@ export function parseConfigurableChapter(definition: ConfigurableSourceDefinitio
   const body = cheerio.load(`<main>${fragment.replace(/<br\s*\/?>/gi, '\n')}</main>`, null, false);
   const exclusions = definition.chapterContentExcludeSelector?.trim();
   if (exclusions) body(exclusions).remove();
-  const paragraphs = body('main').text().split(/\r?\n+/).map(normalizeText).filter(Boolean);
+  const taggedParagraphs = body('main p').map((_index, element) => normalizeText(body(element).text())).get().filter(Boolean);
+  const paragraphs = taggedParagraphs.length > 0 ? taggedParagraphs : body('main').text().split(/\r?\n+/).map(normalizeText).filter(Boolean);
   if (paragraphs.length === 0) throw new SourceError('SOURCE_LAYOUT_CHANGED', 'Chapter body is empty');
   return { title, paragraphs };
 }
 
 export function createConfigurableSource(definition: ConfigurableSourceDefinition): SourceAdapter {
   const origin = siteOrigin(definition);
+  pathExpression(definition);
+  validateSelectors(definition);
   return {
     id: definition.id,
     name: definition.name,
