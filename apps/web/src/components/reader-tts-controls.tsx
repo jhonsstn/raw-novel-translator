@@ -430,7 +430,7 @@ export function ReaderTtsControls({ chapterId, language, paragraphs, contentRef,
             <div className="text-sm font-bold">Narration</div>
             <div className="truncate text-xs text-muted">
               {progress
-                ? `Paragraph ${progress} · ${language === 'en' ? 'English' : '中文'}`
+                ? `Paragraph ${progress} · ${language === 'en' ? 'English' : 'Chinese'}`
                 : 'Starts from the first visible paragraph'}
             </div>
           </div>

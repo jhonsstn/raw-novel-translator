@@ -554,6 +554,52 @@ export function NovelClient({ novelId }: { novelId: string }) {
           {error}
         </div>
       )}
+      <details className="group mb-4 overflow-hidden rounded-[15px] border border-line bg-card text-ink shadow-card">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-5 px-[22px] py-4 [&::-webkit-details-marker]:hidden max-[760px]:px-[17px]">
+          <span className="flex items-center gap-3">
+            <span className="grid size-9 place-items-center rounded-lg bg-paper text-muted">
+              <Settings2 size={17} />
+            </span>
+            <span>
+              <strong className="block">Automation</strong>
+              <span className="text-sm text-muted">
+                {Number(novel.autoTranslate) + Number(novel.autoCheck)} of 2 enabled
+              </span>
+            </span>
+          </span>
+          <ChevronDown className="shrink-0 text-muted transition-transform group-open:rotate-180" size={17} />
+        </summary>
+        <div className="grid grid-cols-2 border-t border-line max-[700px]:grid-cols-1">
+          <div className="flex items-center justify-between gap-6 border-r border-line px-[22px] py-5 max-[700px]:border-r-0 max-[700px]:border-b max-[760px]:px-[17px]">
+            <div>
+              <strong>Translate ahead</strong>
+              <div className="mt-1 text-sm text-muted">Keep the next unread chapters ready.</div>
+            </div>
+            <button
+              className={`${switchClass} ${novel.autoTranslate ? 'bg-success after:translate-x-5' : ''}`}
+              type="button"
+              role="switch"
+              aria-checked={novel.autoTranslate}
+              aria-label="Toggle automatic translation"
+              onClick={() => void toggle('autoTranslate', !novel.autoTranslate)}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-6 px-[22px] py-5 max-[760px]:px-[17px]">
+            <div>
+              <strong>Check for updates</strong>
+              <div className="mt-1 text-sm text-muted">Poll the source on schedule.</div>
+            </div>
+            <button
+              className={`${switchClass} ${novel.autoCheck ? 'bg-success after:translate-x-5' : ''}`}
+              type="button"
+              role="switch"
+              aria-checked={novel.autoCheck}
+              aria-label="Toggle update checks"
+              onClick={() => void toggle('autoCheck', !novel.autoCheck)}
+            />
+          </div>
+        </div>
+      </details>
       <section className="overflow-hidden rounded-[15px] border border-line bg-card text-ink shadow-card">
         <header className="p-[22px] max-[760px]:p-[17px]">
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -739,52 +785,6 @@ export function NovelClient({ novelId }: { novelId: string }) {
           )}
         </footer>
       </section>
-      <details className="group mt-4 overflow-hidden rounded-[15px] border border-line bg-card text-ink shadow-card">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-5 px-[22px] py-4 [&::-webkit-details-marker]:hidden max-[760px]:px-[17px]">
-          <span className="flex items-center gap-3">
-            <span className="grid size-9 place-items-center rounded-lg bg-paper text-muted">
-              <Settings2 size={17} />
-            </span>
-            <span>
-              <strong className="block">Automation</strong>
-              <span className="text-sm text-muted">
-                {Number(novel.autoTranslate) + Number(novel.autoCheck)} of 2 enabled
-              </span>
-            </span>
-          </span>
-          <ChevronDown className="shrink-0 text-muted transition-transform group-open:rotate-180" size={17} />
-        </summary>
-        <div className="grid grid-cols-2 border-t border-line max-[700px]:grid-cols-1">
-          <div className="flex items-center justify-between gap-6 border-r border-line px-[22px] py-5 max-[700px]:border-r-0 max-[700px]:border-b max-[760px]:px-[17px]">
-            <div>
-              <strong>Translate ahead</strong>
-              <div className="mt-1 text-sm text-muted">Keep the next unread chapters ready.</div>
-            </div>
-            <button
-              className={`${switchClass} ${novel.autoTranslate ? 'bg-success after:translate-x-5' : ''}`}
-              type="button"
-              role="switch"
-              aria-checked={novel.autoTranslate}
-              aria-label="Toggle automatic translation"
-              onClick={() => void toggle('autoTranslate', !novel.autoTranslate)}
-            />
-          </div>
-          <div className="flex items-center justify-between gap-6 px-[22px] py-5 max-[760px]:px-[17px]">
-            <div>
-              <strong>Check for updates</strong>
-              <div className="mt-1 text-sm text-muted">Poll the source on schedule.</div>
-            </div>
-            <button
-              className={`${switchClass} ${novel.autoCheck ? 'bg-success after:translate-x-5' : ''}`}
-              type="button"
-              role="switch"
-              aria-checked={novel.autoCheck}
-              aria-label="Toggle update checks"
-              onClick={() => void toggle('autoCheck', !novel.autoCheck)}
-            />
-          </div>
-        </div>
-      </details>
       {editing && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-overlay p-5 backdrop-blur-lg">
           <div className="max-h-[90vh] w-[min(560px,100%)] overflow-auto rounded-2xl border border-line bg-card p-6 text-ink shadow-float">

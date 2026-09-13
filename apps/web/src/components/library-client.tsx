@@ -126,7 +126,7 @@ export function LibraryClient() {
           <h1>Stories, gathered and translated.</h1>
           <p className="mt-[13px] max-w-[660px] text-muted">
             Import a Chinese chapter URL from any configured source, keep your place, and switch cleanly between English
-            and 中文.
+            and Chinese.
           </p>
         </div>
         <button
@@ -219,7 +219,8 @@ export function LibraryClient() {
             </div>
             <form className="grid gap-4" onSubmit={submit} aria-busy={pending}>
               <p className="text-muted" id="import-metadata-help">
-                Enter the novel title and optional author and description yourself. These are not scraped from the source.
+                Enter the novel title and optional author and description yourself. These are not scraped from the
+                source.
               </p>
               <label className="grid gap-[7px] text-xs font-[720] text-ink">
                 Novel title

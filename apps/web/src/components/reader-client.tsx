@@ -240,7 +240,7 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
               className={`${segmentClass} ${mode === 'source' ? 'bg-card text-ink-strong shadow-[0_1px_4px_rgb(0_0_0/10%)]' : ''}`}
               onClick={() => chooseMode('source')}
             >
-              中文
+              Chinese
             </button>
           </div>
           <button className={buttonClass} onClick={() => void toggleRead()}>
@@ -318,7 +318,7 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
         style={{ fontSize, lineHeight }}
       >
         <div className={`mb-7 text-[10px] uppercase tracking-[.13em] ${dark ? 'text-[#96969f]' : 'text-muted'}`}>
-          {mode === 'en' ? `English${chapter.translatedModel ? ` · ${chapter.translatedModel}` : ''}` : '中文原文'}
+          {mode === 'en' ? `English${chapter.translatedModel ? ` · ${chapter.translatedModel}` : ''}` : 'Chinese原文'}
         </div>
         {paragraphs?.map((paragraph, paragraphIndex) => <p key={paragraphIndex}>{paragraph}</p>) ??
           (mode === 'en' && chapter.sourceParagraphs ? (
