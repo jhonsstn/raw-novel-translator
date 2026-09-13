@@ -13,7 +13,7 @@ export const piaotiaDefinition: ConfigurableSourceDefinition = {
   chapterTitleSelector: 'h1',
   chapterTitleExcludeSelector: 'a',
   chapterContentSelector: 'body',
-  chapterContentStartSelector: '.toplink + table',
+  chapterContentStartSelector: '.toplink ~ table',
   chapterContentEndSelector: '.bottomlink',
   chapterContentEndText: '翻页上AD开始',
   chapterContentExcludeSelector: 'script,style,table,iframe,a',
