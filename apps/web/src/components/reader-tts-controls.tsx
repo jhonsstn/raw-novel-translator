@@ -125,7 +125,7 @@ export function ReaderTtsControls({ chapterId, language, paragraphs, contentRef,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
-      signal,
+      ...(signal ? { signal } : {}),
     });
     if (!response.ok) {
       const value: unknown = await response.json().catch(() => null);
