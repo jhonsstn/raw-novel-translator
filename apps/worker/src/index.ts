@@ -20,14 +20,24 @@ import {
 const shutdown = new AbortController();
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-async function execute(job: Job, signal: AbortSignal): Promise<{ deferred?: boolean; progress?: Record<string, unknown> }> {
+async function execute(
+  job: Job,
+  signal: AbortSignal,
+): Promise<{ deferred?: boolean; progress?: Record<string, unknown> }> {
   switch (job.kind) {
-    case 'import': return handleImportJob(job, signal);
-    case 'check_updates': return handleCheckUpdatesJob(job, signal);
-    case 'fetch_chapter': await handleFetchChapterJob(job, signal); return {};
-    case 'translate_chapter': return { progress: await handleTranslationJob(job, signal) };
-    case 'provider_check': return { progress: await handleProviderCheckJob(job, signal) };
-    case 'source_check': return { progress: await handleSourceCheckJob(job, signal) };
+    case 'import':
+      return handleImportJob(job, signal);
+    case 'check_updates':
+      return handleCheckUpdatesJob(job, signal);
+    case 'fetch_chapter':
+      await handleFetchChapterJob(job, signal);
+      return {};
+    case 'translate_chapter':
+      return { progress: await handleTranslationJob(job, signal) };
+    case 'provider_check':
+      return { progress: await handleProviderCheckJob(job, signal) };
+    case 'source_check':
+      return { progress: await handleSourceCheckJob(job, signal) };
   }
 }
 
@@ -62,13 +72,19 @@ async function laneLoop(lane: 'source' | 'translation'): Promise<void> {
 
 function recordHeartbeat(): void {
   const now = Date.now();
-  getDatabase().sqlite.prepare(`INSERT INTO worker_state(id,heartbeat_at) VALUES (1,?) ON CONFLICT(id) DO UPDATE SET heartbeat_at=excluded.heartbeat_at`).run(now);
+  getDatabase()
+    .sqlite.prepare(
+      `INSERT INTO worker_state(id,heartbeat_at) VALUES (1,?) ON CONFLICT(id) DO UPDATE SET heartbeat_at=excluded.heartbeat_at`,
+    )
+    .run(now);
 }
 
 function schedulerTick(): void {
   const sqlite = getDatabase().sqlite;
   const now = Date.now();
-  const due = sqlite.prepare('SELECT id FROM novels WHERE auto_check=1 AND COALESCE(next_check_at,0)<=?').all(now) as Array<{ id: string }>;
+  const due = sqlite
+    .prepare('SELECT id FROM novels WHERE auto_check=1 AND COALESCE(next_check_at,0)<=?')
+    .all(now) as Array<{ id: string }>;
   for (const novel of due) queueCheckUpdates(novel.id, 'automatic');
   const translating = sqlite.prepare('SELECT id FROM novels WHERE auto_translate=1').all() as Array<{ id: string }>;
   for (const novel of translating) reconcileTranslationWindow(novel.id);

@@ -16,12 +16,16 @@ describe('Piaotia adapter', () => {
       <li><a href="902.html">First</a></li><li><a href="17.html">Second</a></li><li><a href="17.html#copy">Second copy</a></li>
       <li><a href="https://evil.example/3.html">Foreign</a></li></ul></div>`;
     const result = parseDirectory(html, 'https://www.piaotia.com/html/10/20/index.html');
-    expect(result.map((chapter) => [chapter.sourceChapterId, chapter.title, chapter.ordinal])).toEqual([['902', 'First', 0], ['17', 'Second', 1]]);
+    expect(result.map((chapter) => [chapter.sourceChapterId, chapter.title, chapter.ordinal])).toEqual([
+      ['902', 'First', 0],
+      ['17', 'Second', 1],
+    ]);
   });
 
   it('resolves novel identity directly from a canonical chapter URL', () => {
     expect(piaotia.resolveNovel(new URL('https://www.piaotia.com/html/3/3847/11622833.html#reading'))).toEqual({
-      sourceNovelId: '3/3847', indexUrl: 'https://www.piaotia.com/html/3/3847/index.html',
+      sourceNovelId: '3/3847',
+      indexUrl: 'https://www.piaotia.com/html/3/3847/index.html',
     });
   });
 

@@ -1,7 +1,11 @@
 import { getStoredProviderApiKey } from './settings.js';
 
 export class AppError extends Error {
-  constructor(public readonly code: string, message: string, public readonly status = 400) {
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly status = 400,
+  ) {
     super(message);
     this.name = 'AppError';
   }
@@ -19,7 +23,11 @@ export function sanitizedDiagnosticText(value: string, limit = 16_000): string {
 
 function diagnosticRedactor(): (value: string, limit: number) => string {
   const secrets: Array<string | null | undefined> = [process.env.APP_SECRET_KEY];
-  try { secrets.push(getStoredProviderApiKey()); } catch { /* Settings or encryption may not be initialized. */ }
+  try {
+    secrets.push(getStoredProviderApiKey());
+  } catch {
+    /* Settings or encryption may not be initialized. */
+  }
   const variants = new Set<string>();
   for (const secret of secrets) {
     if (!secret) continue;
@@ -30,10 +38,13 @@ function diagnosticRedactor(): (value: string, limit: number) => string {
     let text = value;
     for (const secret of variants) text = text.replaceAll(secret, '[redacted]');
     text = text
-      .replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s<>"']+/gi, (url) => url
-        .replace(/(\/\/)[^/?#]*@/, '$1[redacted]@')
-        .replace(/[?#].*$/, '?[redacted]'))
-      .replace(/((?:proxy[-_ ]?)?authorization|api[-_ ]?key|bearer)\b["']?\s*[:=]?\s*(?:(?:bearer|basic)\s+)?(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1 [redacted]');
+      .replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s<>"']+/gi, (url) =>
+        url.replace(/(\/\/)[^/?#]*@/, '$1[redacted]@').replace(/[?#].*$/, '?[redacted]'),
+      )
+      .replace(
+        /((?:proxy[-_ ]?)?authorization|api[-_ ]?key|bearer)\b["']?\s*[:=]?\s*(?:(?:bearer|basic)\s+)?(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
+        '$1 [redacted]',
+      );
     return text.length > limit ? `${text.slice(0, Math.max(0, limit - 14))}\n[truncated]`.slice(0, limit) : text;
   };
 }
@@ -52,18 +63,33 @@ export function errorDiagnostics(error: unknown): string {
     remaining -= text.length + 1;
   };
   const field = (value: object, key: string): unknown => {
-    try { return Reflect.get(value, key); } catch { return undefined; }
+    try {
+      return Reflect.get(value, key);
+    } catch {
+      return undefined;
+    }
   };
   const visit = (value: unknown, label: string, depth: number): void => {
     if (remaining <= 0) return;
-    if (depth > 6 || nodes >= 20) { append(`${label}: [diagnostic limit reached]`); return; }
-    if (!value || typeof value !== 'object') { append(`${label}: Non-Error value omitted`); return; }
-    if (seen.has(value)) { append(`${label}: [circular reference]`); return; }
+    if (depth > 6 || nodes >= 20) {
+      append(`${label}: [diagnostic limit reached]`);
+      return;
+    }
+    if (!value || typeof value !== 'object') {
+      append(`${label}: Non-Error value omitted`);
+      return;
+    }
+    if (seen.has(value)) {
+      append(`${label}: [circular reference]`);
+      return;
+    }
     seen.add(value);
     nodes += 1;
     const name = field(value, 'name');
     const message = field(value, 'message');
-    append(`${label}: ${typeof name === 'string' ? name : 'Error'}${typeof message === 'string' ? `: ${message}` : ''}`);
+    append(
+      `${label}: ${typeof name === 'string' ? name : 'Error'}${typeof message === 'string' ? `: ${message}` : ''}`,
+    );
     for (const key of ['code', 'errno', 'syscall', 'hostname', 'host', 'address', 'port']) {
       const detail = field(value, key);
       if (typeof detail === 'string' || typeof detail === 'number') append(`${key}: ${detail}`);
@@ -73,7 +99,8 @@ export function errorDiagnostics(error: unknown): string {
     if (cause !== undefined) visit(cause, 'Caused by', depth + 1);
     const errors = value instanceof AggregateError ? field(value, 'errors') : undefined;
     if (Array.isArray(errors)) {
-      for (let index = 0; index < Math.min(errors.length, 10) && remaining > 0; index += 1) visit(errors[index], `Aggregate error ${index + 1}`, depth + 1);
+      for (let index = 0; index < Math.min(errors.length, 10) && remaining > 0; index += 1)
+        visit(errors[index], `Aggregate error ${index + 1}`, depth + 1);
       if (errors.length > 10) append('[additional aggregate errors omitted]');
     }
     const stack = field(value, 'stack');

@@ -1,6 +1,17 @@
-export interface ChapterRef { sourceChapterId: string; url: string; title: string; ordinal: number }
-export interface NovelRef { sourceNovelId: string; indexUrl: string }
-export interface SourceContext { fetchHtml(url: string): Promise<string>; signal: AbortSignal }
+export interface ChapterRef {
+  sourceChapterId: string;
+  url: string;
+  title: string;
+  ordinal: number;
+}
+export interface NovelRef {
+  sourceNovelId: string;
+  indexUrl: string;
+}
+export interface SourceContext {
+  fetchHtml(url: string): Promise<string>;
+  signal: AbortSignal;
+}
 export interface SourceAdapter {
   id: string;
   name: string;
@@ -31,5 +42,11 @@ export interface ConfigurableSourceDefinition {
 }
 
 export class SourceError extends Error {
-  constructor(public readonly code: string, message: string) { super(message); this.name = 'SourceError'; }
+  constructor(
+    public readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'SourceError';
+  }
 }

@@ -3,7 +3,10 @@ import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import * as schema from './schema.js';
 
 export type AppDatabase = BetterSQLite3Database<typeof schema>;
-export interface DatabaseHandle { sqlite: Database.Database; db: AppDatabase }
+export interface DatabaseHandle {
+  sqlite: Database.Database;
+  db: AppDatabase;
+}
 
 let singleton: DatabaseHandle | undefined;
 
@@ -25,7 +28,12 @@ export function openDatabase(path = process.env.DATABASE_PATH): DatabaseHandle {
   sqlite.pragma('synchronous = FULL');
   sqlite.pragma('busy_timeout = 5000');
   const versionRow: unknown = sqlite.prepare('select sqlite_version() as version').get();
-  if (!versionRow || typeof versionRow !== 'object' || !('version' in versionRow) || typeof versionRow.version !== 'string') {
+  if (
+    !versionRow ||
+    typeof versionRow !== 'object' ||
+    !('version' in versionRow) ||
+    typeof versionRow.version !== 'string'
+  ) {
     sqlite.close();
     throw new Error('Could not read SQLite version');
   }

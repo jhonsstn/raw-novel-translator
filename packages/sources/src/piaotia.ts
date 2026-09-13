@@ -20,5 +20,6 @@ export const piaotiaDefinition: ConfigurableSourceDefinition = {
 };
 
 export const piaotia = createConfigurableSource(piaotiaDefinition);
-export const parseDirectory = (html: string, indexUrl: string) => parseConfigurableDirectory(piaotiaDefinition, html, indexUrl);
+export const parseDirectory = (html: string, indexUrl: string) =>
+  parseConfigurableDirectory(piaotiaDefinition, html, indexUrl);
 export const parseChapter = (html: string) => parseConfigurableChapter(piaotiaDefinition, html);

@@ -9,11 +9,17 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock('node:dns', () => ({
-  lookup: (_hostname: string, _options: LookupAllOptions, callback: (error: NodeJS.ErrnoException | null, addresses: LookupAddress[]) => void) => callback(state.error, state.addresses),
+  lookup: (
+    _hostname: string,
+    _options: LookupAllOptions,
+    callback: (error: NodeJS.ErrnoException | null, addresses: LookupAddress[]) => void,
+  ) => callback(state.error, state.addresses),
 }));
 vi.mock('undici', () => ({
   Agent: class {
-    constructor(options: { connect: { lookup: LookupFunction } }) { state.lookup = options.connect.lookup; }
+    constructor(options: { connect: { lookup: LookupFunction } }) {
+      state.lookup = options.connect.lookup;
+    }
   },
   fetch: vi.fn(),
 }));
@@ -21,15 +27,20 @@ vi.mock('undici', () => ({
 import '../src/http.js';
 
 beforeEach(() => {
-  state.addresses = [{ address: '93.184.215.14', family: 4 }, { address: '2606:4700:4700::1111', family: 6 }];
+  state.addresses = [
+    { address: '93.184.215.14', family: 4 },
+    { address: '2606:4700:4700::1111', family: 6 },
+  ];
   state.error = null;
 });
 
 function resolveHost(all: boolean) {
-  return new Promise<{ error: NodeJS.ErrnoException | null; address: string | LookupAddress[]; family?: number }>((resolve) => {
-    if (!state.lookup) throw new Error('Source agent lookup is missing');
-    state.lookup('www.piaotia.com', { all }, (error, address, family) => resolve({ error, address, family }));
-  });
+  return new Promise<{ error: NodeJS.ErrnoException | null; address: string | LookupAddress[]; family?: number }>(
+    (resolve) => {
+      if (!state.lookup) throw new Error('Source agent lookup is missing');
+      state.lookup('www.piaotia.com', { all }, (error, address, family) => resolve({ error, address, family }));
+    },
+  );
 }
 
 it('returns address objects when Node requests all addresses for family selection', async () => {

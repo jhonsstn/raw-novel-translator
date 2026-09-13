@@ -4,13 +4,25 @@ import { SourceError } from './types.js';
 
 function siteOrigin(definition: ConfigurableSourceDefinition): string {
   let url: URL;
-  try { url = new URL(definition.siteUrl); } catch { throw new SourceError('INVALID_SOURCE_CONFIG', 'Source site URL is invalid'); }
-  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw new SourceError('INVALID_SOURCE_CONFIG', 'Source site URL must be an HTTPS URL without credentials, query, or fragment');
+  try {
+    url = new URL(definition.siteUrl);
+  } catch {
+    throw new SourceError('INVALID_SOURCE_CONFIG', 'Source site URL is invalid');
+  }
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash)
+    throw new SourceError(
+      'INVALID_SOURCE_CONFIG',
+      'Source site URL must be an HTTPS URL without credentials, query, or fragment',
+    );
   return url.origin;
 }
 
 function pathExpression(definition: ConfigurableSourceDefinition): RegExp {
-  try { return new RegExp(definition.chapterPathPattern); } catch { throw new SourceError('INVALID_SOURCE_CONFIG', 'Chapter path pattern is not a valid regular expression'); }
+  try {
+    return new RegExp(definition.chapterPathPattern);
+  } catch {
+    throw new SourceError('INVALID_SOURCE_CONFIG', 'Chapter path pattern is not a valid regular expression');
+  }
 }
 
 function matchChapter(definition: ConfigurableSourceDefinition, url: URL): RegExpMatchArray | null {
@@ -27,18 +39,29 @@ function indexUrlForMatch(definition: ConfigurableSourceDefinition, match: RegEx
 }
 
 function canonicalChapterUrl(definition: ConfigurableSourceDefinition, input: URL): URL {
-  if (!matchChapter(definition, input)) throw new SourceError('UNSUPPORTED_URL', `This is not a ${definition.name} chapter URL`);
+  if (!matchChapter(definition, input))
+    throw new SourceError('UNSUPPORTED_URL', `This is not a ${definition.name} chapter URL`);
   const clean = new URL(input.href);
   clean.hash = '';
   return clean;
 }
 
 function normalizeText(value: string): string {
-  return value.replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').trim();
+  return value
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
 }
 
 function indexed(node: unknown, label: string): { startIndex: number; endIndex: number } {
-  if (!node || typeof node !== 'object' || !('startIndex' in node) || !('endIndex' in node) || typeof node.startIndex !== 'number' || typeof node.endIndex !== 'number') {
+  if (
+    !node ||
+    typeof node !== 'object' ||
+    !('startIndex' in node) ||
+    !('endIndex' in node) ||
+    typeof node.startIndex !== 'number' ||
+    typeof node.endIndex !== 'number'
+  ) {
     throw new SourceError('SOURCE_LAYOUT_CHANGED', `${label} source position is missing`);
   }
   return { startIndex: node.startIndex, endIndex: node.endIndex };
@@ -64,11 +87,18 @@ function validateSelectors(definition: ConfigurableSourceDefinition): void {
     definition.chapterContentEndSelector,
     definition.chapterContentExcludeSelector,
   ].filter((value): value is string => Boolean(value?.trim()));
-  try { for (const selector of selectors) $(selector); }
-  catch { throw new SourceError('INVALID_SOURCE_CONFIG', 'One or more CSS selectors are invalid'); }
+  try {
+    for (const selector of selectors) $(selector);
+  } catch {
+    throw new SourceError('INVALID_SOURCE_CONFIG', 'One or more CSS selectors are invalid');
+  }
 }
 
-export function parseConfigurableDirectory(definition: ConfigurableSourceDefinition, html: string, indexUrl: string): ChapterRef[] {
+export function parseConfigurableDirectory(
+  definition: ConfigurableSourceDefinition,
+  html: string,
+  indexUrl: string,
+): ChapterRef[] {
   const $ = load(html);
   const base = new URL(indexUrl);
   const canonicalIndexUrl = base.href;
@@ -79,36 +109,57 @@ export function parseConfigurableDirectory(definition: ConfigurableSourceDefinit
     const title = normalizeText($(element).text());
     if (!href || !title) return;
     let url: URL;
-    try { url = new URL(href, base); } catch { return; }
+    try {
+      url = new URL(href, base);
+    } catch {
+      return;
+    }
     const match = matchChapter(definition, url);
     if (!match || indexUrlForMatch(definition, match) !== canonicalIndexUrl) return;
     url.hash = '';
     const canonical = url.href;
     if (seen.has(canonical)) return;
     seen.add(canonical);
-    chapters.push({ sourceChapterId: sourceChapterId(definition, match, canonical), url: canonical, title, ordinal: chapters.length });
+    chapters.push({
+      sourceChapterId: sourceChapterId(definition, match, canonical),
+      url: canonical,
+      title,
+      ordinal: chapters.length,
+    });
   });
-  if (chapters.length === 0) throw new SourceError('SOURCE_LAYOUT_CHANGED', `No chapter links matched ${definition.chapterLinkSelector}`);
+  if (chapters.length === 0)
+    throw new SourceError('SOURCE_LAYOUT_CHANGED', `No chapter links matched ${definition.chapterLinkSelector}`);
   return chapters;
 }
 
-export function parseConfigurableChapter(definition: ConfigurableSourceDefinition, html: string): { title: string; paragraphs: string[] } {
-  if (/cf-chl-|captcha|attention required/i.test(html) && html.length < 100_000) throw new SourceError('SOURCE_BLOCKED', 'Source returned a challenge page');
+export function parseConfigurableChapter(
+  definition: ConfigurableSourceDefinition,
+  html: string,
+): { title: string; paragraphs: string[] } {
+  if (/cf-chl-|captcha|attention required/i.test(html) && html.length < 100_000)
+    throw new SourceError('SOURCE_BLOCKED', 'Source returned a challenge page');
   const $ = load(html);
   const heading = $(definition.chapterTitleSelector).first();
   if (definition.chapterTitleExcludeSelector) heading.find(definition.chapterTitleExcludeSelector).remove();
   const title = normalizeText(heading.text());
-  if (!title) throw new SourceError('SOURCE_LAYOUT_CHANGED', `Chapter title selector did not match: ${definition.chapterTitleSelector}`);
+  if (!title)
+    throw new SourceError(
+      'SOURCE_LAYOUT_CHANGED',
+      `Chapter title selector did not match: ${definition.chapterTitleSelector}`,
+    );
 
   let fragment: string;
   if (definition.chapterContentStartSelector || definition.chapterContentEndSelector) {
-    if (!definition.chapterContentStartSelector || !definition.chapterContentEndSelector) throw new SourceError('INVALID_SOURCE_CONFIG', 'Content start and end selectors must be configured together');
+    if (!definition.chapterContentStartSelector || !definition.chapterContentEndSelector)
+      throw new SourceError('INVALID_SOURCE_CONFIG', 'Content start and end selectors must be configured together');
     const start = $(definition.chapterContentStartSelector).first();
     const end = $(definition.chapterContentEndSelector).first();
-    if (!start.length || !end.length) throw new SourceError('SOURCE_LAYOUT_CHANGED', 'Configured chapter content boundaries were not found');
+    if (!start.length || !end.length)
+      throw new SourceError('SOURCE_LAYOUT_CHANGED', 'Configured chapter content boundaries were not found');
     const startNode = indexed(start.get(0), 'Content start');
     const endNode = indexed(end.get(0), 'Content end');
-    if (endNode.startIndex <= startNode.endIndex) throw new SourceError('SOURCE_LAYOUT_CHANGED', 'Configured chapter content boundaries are invalid');
+    if (endNode.startIndex <= startNode.endIndex)
+      throw new SourceError('SOURCE_LAYOUT_CHANGED', 'Configured chapter content boundaries are invalid');
     let fragmentEnd = endNode.startIndex;
     const marker = definition.chapterContentEndText?.trim();
     if (marker) {
@@ -121,15 +172,29 @@ export function parseConfigurableChapter(definition: ConfigurableSourceDefinitio
     fragment = html.slice(startNode.endIndex + 1, fragmentEnd);
   } else {
     const content = $(definition.chapterContentSelector).first();
-    if (!content.length) throw new SourceError('SOURCE_LAYOUT_CHANGED', `Chapter content selector did not match: ${definition.chapterContentSelector}`);
+    if (!content.length)
+      throw new SourceError(
+        'SOURCE_LAYOUT_CHANGED',
+        `Chapter content selector did not match: ${definition.chapterContentSelector}`,
+      );
     fragment = content.html() ?? '';
   }
 
   const body = cheerio.load(`<main>${fragment.replace(/<br\s*\/?>/gi, '\n')}</main>`, null, false);
   const exclusions = definition.chapterContentExcludeSelector?.trim();
   if (exclusions) body(exclusions).remove();
-  const taggedParagraphs = body('main p').map((_index, element) => normalizeText(body(element).text())).get().filter(Boolean);
-  const paragraphs = taggedParagraphs.length > 0 ? taggedParagraphs : body('main').text().split(/\r?\n+/).map(normalizeText).filter(Boolean);
+  const taggedParagraphs = body('main p')
+    .map((_index, element) => normalizeText(body(element).text()))
+    .get()
+    .filter(Boolean);
+  const paragraphs =
+    taggedParagraphs.length > 0
+      ? taggedParagraphs
+      : body('main')
+          .text()
+          .split(/\r?\n+/)
+          .map(normalizeText)
+          .filter(Boolean);
   if (paragraphs.length === 0) throw new SourceError('SOURCE_LAYOUT_CHANGED', 'Chapter body is empty');
   return { title, paragraphs };
 }
@@ -143,7 +208,9 @@ export function createConfigurableSource(definition: ConfigurableSourceDefinitio
     name: definition.name,
     version: 'configurable-1',
     hosts: [new URL(origin).hostname],
-    matches(url) { return matchChapter(definition, url) !== null; },
+    matches(url) {
+      return matchChapter(definition, url) !== null;
+    },
     resolveNovel(url): NovelRef {
       const canonical = canonicalChapterUrl(definition, url);
       const match = matchChapter(definition, canonical)!;
@@ -151,7 +218,11 @@ export function createConfigurableSource(definition: ConfigurableSourceDefinitio
       const novelIdTemplate = definition.novelIdTemplate?.trim();
       return { sourceNovelId: novelIdTemplate ? expandTemplate(novelIdTemplate, match) : indexUrl, indexUrl };
     },
-    async listChapters(novel, ctx) { return parseConfigurableDirectory(definition, await ctx.fetchHtml(novel.indexUrl), novel.indexUrl); },
-    async fetchChapter(chapter, ctx) { return parseConfigurableChapter(definition, await ctx.fetchHtml(chapter.url)); },
+    async listChapters(novel, ctx) {
+      return parseConfigurableDirectory(definition, await ctx.fetchHtml(novel.indexUrl), novel.indexUrl);
+    },
+    async fetchChapter(chapter, ctx) {
+      return parseConfigurableChapter(definition, await ctx.fetchHtml(chapter.url));
+    },
   };
 }

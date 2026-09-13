@@ -9,7 +9,9 @@ export function migrate(): void {
   const applied = sqlite.prepare('SELECT 1 FROM _migrations WHERE name = ?');
   const record = sqlite.prepare('INSERT INTO _migrations(name, applied_at) VALUES (?, ?)');
   const directory = resolve(dirname(fileURLToPath(import.meta.url)), '../migrations');
-  for (const name of readdirSync(directory).filter((file) => file.endsWith('.sql')).sort()) {
+  for (const name of readdirSync(directory)
+    .filter((file) => file.endsWith('.sql'))
+    .sort()) {
     if (applied.get(name)) continue;
     const sql = readFileSync(resolve(directory, name), 'utf8');
     sqlite.transaction(() => {
