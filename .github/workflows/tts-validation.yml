@@ -1,0 +1,23 @@
+name: TTS feature validation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feature/reader-tts]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: find . -name '*.tsbuildinfo' -delete
+      - run: pnpm build:packages
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
