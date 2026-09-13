@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { getDatabase } from '@novel/db';
-import { createSourceTransport, sourceById, sourceForUrl, type ChapterRef, type NovelRef, type SourceAdapter, type SourceContext } from '@novel/sources';
+import { createSourceTransport, type ChapterRef, type NovelRef, type SourceAdapter, type SourceContext } from '@novel/sources';
 import { AppError } from './errors.js';
 import { deferParentJob, enqueueJob, finalizeParentJob, type Job } from './jobs.js';
 import { normalizeNovelText } from './novel-metadata.js';
+import { configuredSourceById, configuredSourceForUrl } from './source-definitions.js';
 
 interface NovelRow {
   id: string; source_id: string; source_novel_id: string; index_url: string;
@@ -58,7 +59,7 @@ async function reserveSourceRequest(sourceId: string, minimumDelayMs: number): P
 }
 
 function contextFor(adapter: SourceAdapter, signal: AbortSignal): SourceContext {
-  return { signal, fetchHtml: createSourceTransport({ signal, beforeRequest: (minimum) => reserveSourceRequest(adapter.id, minimum) }) };
+  return { signal, fetchHtml: createSourceTransport({ signal, allowedHosts: adapter.hosts, beforeRequest: (minimum) => reserveSourceRequest(adapter.id, minimum) }) };
 }
 
 export function startImport(input: ImportInput): Job {
@@ -67,7 +68,7 @@ export function startImport(input: ImportInput): Job {
   let parsed: URL;
   try { parsed = new URL(url); } catch { throw new AppError('INVALID_URL', 'Enter a valid chapter URL'); }
   parsed.hash = '';
-  const adapter = sourceForUrl(parsed);
+  const adapter = configuredSourceForUrl(parsed);
   const settings = getDatabase().sqlite.prepare('SELECT enabled FROM source_settings WHERE source_id=?').get(adapter.id);
   if (!settings || typeof settings !== 'object' || !('enabled' in settings) || settings.enabled !== 1) throw new AppError('SOURCE_DISABLED', 'This source is disabled', 409);
   const payload = { ...normalized, url: parsed.href };
@@ -138,7 +139,7 @@ export async function handleImportJob(job: Job, signal: AbortSignal): Promise<{ 
   const url = new URL(input.url);
   url.hash = '';
   input.url = url.href;
-  const adapter = sourceForUrl(url);
+  const adapter = configuredSourceForUrl(url);
   const context = contextFor(adapter, signal);
   const novel = adapter.resolveNovel(url);
   const listed = await adapter.listChapters(novel, context);
@@ -160,7 +161,7 @@ export async function handleCheckUpdatesJob(job: Job, signal: AbortSignal): Prom
   const sqlite = getDatabase().sqlite;
   const novel = sqlite.prepare('SELECT * FROM novels WHERE id=?').get(novelId) as NovelRow | undefined;
   if (!novel) throw new AppError('NOVEL_NOT_FOUND', 'Novel not found', 404);
-  const adapter = sourceById(novel.source_id);
+  const adapter = configuredSourceById(novel.source_id);
   const context = contextFor(adapter, signal);
   const listed = await adapter.listChapters({ sourceNovelId: novel.source_novel_id, indexUrl: novel.index_url }, context);
   const boundary = listed.findIndex((chapter) => chapter.url === novel.start_chapter_url);
@@ -199,7 +200,7 @@ export async function handleFetchChapterJob(job: Job, signal: AbortSignal): Prom
   const row = sqlite.prepare('SELECT c.*,n.source_id FROM chapters c JOIN novels n ON n.id=c.novel_id WHERE c.id=?').get(chapterId);
   if (!row || typeof row !== 'object' || !('source_id' in row) || !('canonical_url' in row) || !('source_chapter_id' in row) || !('ordinal' in row) || !('title' in row) || typeof row.source_id !== 'string' || typeof row.canonical_url !== 'string' || typeof row.source_chapter_id !== 'string' || typeof row.ordinal !== 'number' || typeof row.title !== 'string') throw new AppError('CHAPTER_NOT_FOUND', 'Chapter not found', 404);
   if ('paragraphs' in row && row.paragraphs !== null) return;
-  const adapter = sourceById(row.source_id);
+  const adapter = configuredSourceById(row.source_id);
   const result = await adapter.fetchChapter({ sourceChapterId: row.source_chapter_id, url: row.canonical_url, ordinal: row.ordinal, title: row.title }, contextFor(adapter, signal));
   const serialized = JSON.stringify(result.paragraphs);
   const hash = createHash('sha256').update(serialized).digest('hex');
@@ -208,7 +209,7 @@ export async function handleFetchChapterJob(job: Job, signal: AbortSignal): Prom
 
 export async function handleSourceCheckJob(job: Job, signal: AbortSignal): Promise<Record<string, unknown>> {
   const sourceId = requireString(job.payload, 'sourceId');
-  const adapter = sourceById(sourceId);
+  const adapter = configuredSourceById(sourceId);
   const sqlite = getDatabase().sqlite;
   const known = sqlite.prepare('SELECT source_novel_id,index_url FROM novels WHERE source_id=? ORDER BY created_at LIMIT 1').get(sourceId);
   const context = contextFor(adapter, signal);
