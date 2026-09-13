@@ -31,7 +31,8 @@ export async function POST(request: Request): Promise<Response> {
     const body: unknown = await request.json();
     const { text } = schema.parse(body);
     const audio = await createTtsSpeech(text, request.signal);
-    return new Response(audio.bytes, {
+    const bytes = Uint8Array.from(audio.bytes);
+    return new Response(bytes.buffer, {
       headers: {
         'Content-Type': audio.contentType,
         'Cache-Control': 'private, no-store',
