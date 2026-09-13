@@ -22,6 +22,10 @@ function expandTemplate(template: string, match: RegExpMatchArray): string {
   return template.replace(/\{(\d+)\}/g, (_whole, index: string) => match[Number(index)] ?? '');
 }
 
+function indexUrlForMatch(definition: ConfigurableSourceDefinition, match: RegExpMatchArray): string {
+  return new URL(expandTemplate(definition.indexPathTemplate, match), definition.siteUrl).href;
+}
+
 function canonicalChapterUrl(definition: ConfigurableSourceDefinition, input: URL): URL {
   if (!matchChapter(definition, input)) throw new SourceError('UNSUPPORTED_URL', `This is not a ${definition.name} chapter URL`);
   const clean = new URL(input.href);
@@ -67,6 +71,7 @@ function validateSelectors(definition: ConfigurableSourceDefinition): void {
 export function parseConfigurableDirectory(definition: ConfigurableSourceDefinition, html: string, indexUrl: string): ChapterRef[] {
   const $ = load(html);
   const base = new URL(indexUrl);
+  const canonicalIndexUrl = base.href;
   const seen = new Set<string>();
   const chapters: ChapterRef[] = [];
   $(definition.chapterLinkSelector).each((_index, element) => {
@@ -76,7 +81,7 @@ export function parseConfigurableDirectory(definition: ConfigurableSourceDefinit
     let url: URL;
     try { url = new URL(href, base); } catch { return; }
     const match = matchChapter(definition, url);
-    if (!match) return;
+    if (!match || indexUrlForMatch(definition, match) !== canonicalIndexUrl) return;
     url.hash = '';
     const canonical = url.href;
     if (seen.has(canonical)) return;
@@ -142,8 +147,7 @@ export function createConfigurableSource(definition: ConfigurableSourceDefinitio
     resolveNovel(url): NovelRef {
       const canonical = canonicalChapterUrl(definition, url);
       const match = matchChapter(definition, canonical)!;
-      const indexPath = expandTemplate(definition.indexPathTemplate, match);
-      const indexUrl = new URL(indexPath, definition.siteUrl).href;
+      const indexUrl = indexUrlForMatch(definition, match);
       const novelIdTemplate = definition.novelIdTemplate?.trim();
       return { sourceNovelId: novelIdTemplate ? expandTemplate(novelIdTemplate, match) : indexUrl, indexUrl };
     },
