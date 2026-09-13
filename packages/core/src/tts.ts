@@ -163,11 +163,9 @@ function voiceOptions(value: unknown): TtsVoiceOption[] {
   return Array.from(new Map(options.map((option) => [option.id, option])).values());
 }
 
-async function catalogRequest(
-  credentials: TtsCredentials,
-  resource: string,
-  body?: Record<string, string>,
-): Promise<unknown> {
+type TtsProviderAccess = Pick<TtsCredentials, 'baseUrl' | 'apiKey' | 'timeoutSeconds'>;
+
+async function catalogRequest(credentials: TtsProviderAccess, resource: string, body?: Record<string, string>): Promise<unknown> {
   const target = `${credentials.baseUrl.replace(/\/$/, '')}/${resource}`;
   const response = await fetch(target, {
     headers: {
@@ -183,7 +181,14 @@ async function catalogRequest(
 }
 
 export async function getTtsCatalog(language?: string): Promise<TtsCatalog> {
-  const credentials = getTtsCredentials();
+  const value = row();
+  if (!value.base_url || !value.encrypted_api_key)
+    throw new AppError('TTS_NOT_CONFIGURED', 'Configure the text-to-speech provider first', 409);
+  const credentials: TtsProviderAccess = {
+    baseUrl: value.base_url,
+    apiKey: decrypt(value.encrypted_api_key),
+    timeoutSeconds: value.timeout_seconds,
+  };
   const voices = language
     ? await catalogRequest(credentials, 'voices', { language })
     : await catalogRequest(credentials, 'voices/all');
@@ -211,11 +216,15 @@ export function getTtsCredentials(): TtsCredentials {
   const value = row();
   if (!value.base_url || !value.model || !value.encrypted_api_key)
     throw new AppError('TTS_NOT_CONFIGURED', 'Configure the text-to-speech provider first', 409);
+  const credentials: TtsProviderAccess = {
+    baseUrl: value.base_url,
+    apiKey: decrypt(value.encrypted_api_key),
+    timeoutSeconds: value.timeout_seconds,
+  };
   return {
     ...getTtsSettings(),
-    baseUrl: value.base_url,
+    ...credentials,
     model: value.model,
-    apiKey: decrypt(value.encrypted_api_key),
     hasApiKey: true,
   };
 }

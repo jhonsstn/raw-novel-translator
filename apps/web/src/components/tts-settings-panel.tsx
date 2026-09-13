@@ -126,9 +126,9 @@ export function TtsSettingsPanel() {
   async function save(event: React.FormEvent) {
     event.preventDefault();
     if (!settings || saving) return;
-    if (!settings.model || !settings.voice) {
+    if (!settings.voice) {
       setMessage('');
-      setError(!settings.model ? 'Select a TTS model.' : 'Select a TTS voice.');
+      setError('Select a TTS voice.');
       return;
     }
     setSaving(true);
