@@ -10,10 +10,10 @@ interface SourceDefinitionRow {
 }
 
 export interface SourceDefinitionInput {
-  name: string; siteUrl: string; chapterPathPattern: string; indexPathTemplate: string; novelIdTemplate?: string | null;
-  chapterIdTemplate?: string | null; chapterLinkSelector: string; chapterTitleSelector: string; chapterTitleExcludeSelector?: string | null;
-  chapterContentSelector?: string | null; chapterContentStartSelector?: string | null; chapterContentEndSelector?: string | null;
-  chapterContentEndText?: string | null; chapterContentExcludeSelector?: string | null;
+  name: string; siteUrl: string; chapterPathPattern: string; indexPathTemplate: string; novelIdTemplate?: string | null | undefined;
+  chapterIdTemplate?: string | null | undefined; chapterLinkSelector: string; chapterTitleSelector: string; chapterTitleExcludeSelector?: string | null | undefined;
+  chapterContentSelector?: string | null | undefined; chapterContentStartSelector?: string | null | undefined; chapterContentEndSelector?: string | null | undefined;
+  chapterContentEndText?: string | null | undefined; chapterContentExcludeSelector?: string | null | undefined;
 }
 
 function optional(value: string | null | undefined): string | null { return value?.trim() || null; }
