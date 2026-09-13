@@ -44,6 +44,11 @@ function load(html: string): cheerio.CheerioAPI {
   return cheerio.load(html, { xml: { xmlMode: false, withStartIndices: true, withEndIndices: true } });
 }
 
+function sourceChapterId(definition: ConfigurableSourceDefinition, match: RegExpMatchArray, canonical: string): string {
+  const template = definition.chapterIdTemplate?.trim();
+  return template ? expandTemplate(template, match) : canonical;
+}
+
 export function parseConfigurableDirectory(definition: ConfigurableSourceDefinition, html: string, indexUrl: string): ChapterRef[] {
   const $ = load(html);
   const base = new URL(indexUrl);
@@ -61,7 +66,7 @@ export function parseConfigurableDirectory(definition: ConfigurableSourceDefinit
     const canonical = url.href;
     if (seen.has(canonical)) return;
     seen.add(canonical);
-    chapters.push({ sourceChapterId: canonical, url: canonical, title, ordinal: chapters.length });
+    chapters.push({ sourceChapterId: sourceChapterId(definition, match, canonical), url: canonical, title, ordinal: chapters.length });
   });
   if (chapters.length === 0) throw new SourceError('SOURCE_LAYOUT_CHANGED', `No chapter links matched ${definition.chapterLinkSelector}`);
   return chapters;
@@ -84,7 +89,16 @@ export function parseConfigurableChapter(definition: ConfigurableSourceDefinitio
     const startNode = indexed(start.get(0), 'Content start');
     const endNode = indexed(end.get(0), 'Content end');
     if (endNode.startIndex <= startNode.endIndex) throw new SourceError('SOURCE_LAYOUT_CHANGED', 'Configured chapter content boundaries are invalid');
-    fragment = html.slice(startNode.endIndex + 1, endNode.startIndex);
+    let fragmentEnd = endNode.startIndex;
+    const marker = definition.chapterContentEndText?.trim();
+    if (marker) {
+      const markerIndex = html.indexOf(marker, startNode.endIndex + 1);
+      if (markerIndex >= 0 && markerIndex < endNode.startIndex) {
+        const commentStart = html.lastIndexOf('<!--', markerIndex);
+        fragmentEnd = commentStart > startNode.endIndex ? commentStart : markerIndex;
+      }
+    }
+    fragment = html.slice(startNode.endIndex + 1, fragmentEnd);
   } else {
     const content = $(definition.chapterContentSelector).first();
     if (!content.length) throw new SourceError('SOURCE_LAYOUT_CHANGED', `Chapter content selector did not match: ${definition.chapterContentSelector}`);
@@ -112,7 +126,8 @@ export function createConfigurableSource(definition: ConfigurableSourceDefinitio
       const match = matchChapter(definition, canonical)!;
       const indexPath = expandTemplate(definition.indexPathTemplate, match);
       const indexUrl = new URL(indexPath, definition.siteUrl).href;
-      return { sourceNovelId: indexUrl, indexUrl };
+      const novelIdTemplate = definition.novelIdTemplate?.trim();
+      return { sourceNovelId: novelIdTemplate ? expandTemplate(novelIdTemplate, match) : indexUrl, indexUrl };
     },
     async listChapters(novel, ctx) { return parseConfigurableDirectory(definition, await ctx.fetchHtml(novel.indexUrl), novel.indexUrl); },
     async fetchChapter(chapter, ctx) { return parseConfigurableChapter(definition, await ctx.fetchHtml(chapter.url)); },
