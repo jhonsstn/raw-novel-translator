@@ -12,6 +12,14 @@ interface ChapterTranslationRow {
   paragraphs: string | null;
   source_hash: string | null;
 }
+interface QueueChapterRow {
+  id: string;
+  novel_id: string;
+  ordinal: number;
+  paragraphs: string | null;
+  translated: number;
+  active: number;
+}
 interface RunRow {
   id: string;
   status: string;
@@ -32,28 +40,87 @@ function stringParagraphs(value: string | null): string[] {
   return [...parsed];
 }
 
+function requireConfiguredProvider() {
+  const provider = getProviderSettings();
+  if (!provider.baseUrl || !provider.model || !provider.hasApiKey)
+    throw new AppError('PROVIDER_NOT_CONFIGURED', 'Configure the translation provider first', 409);
+  return provider;
+}
+
+function enqueueTranslationJob(
+  chapter: { id: string; novel_id: string },
+  regenerate: boolean,
+  origin: 'manual' | 'automatic',
+  providerRevision: number,
+  runAfter?: number,
+): Job {
+  return enqueueJob({
+    kind: 'translate_chapter',
+    payload: { chapterId: chapter.id, regenerate, providerRevision },
+    dedupeKey: `translate:${chapter.id}`,
+    origin,
+    chapterId: chapter.id,
+    novelId: chapter.novel_id,
+    ...(runAfter === undefined ? {} : { runAfter }),
+  });
+}
+
 export function queueTranslation(
   chapterId: string,
   regenerate: boolean,
   origin: 'manual' | 'automatic' = 'manual',
+  runAfter?: number,
 ): Job {
   const sqlite = getDatabase().sqlite;
-  const chapter = sqlite.prepare('SELECT id,paragraphs FROM chapters WHERE id=?').get(chapterId);
-  if (!chapter || typeof chapter !== 'object' || !('paragraphs' in chapter) || chapter.paragraphs === null)
+  const chapter = sqlite
+    .prepare('SELECT id,novel_id,paragraphs FROM chapters WHERE id=?')
+    .get(chapterId) as { id: string; novel_id: string; paragraphs: string | null } | undefined;
+  if (!chapter || chapter.paragraphs === null)
     throw new AppError('CHAPTER_NOT_DOWNLOADED', 'Chapter has not been downloaded', 409);
   const translated = sqlite.prepare('SELECT 1 FROM translations WHERE chapter_id=?').get(chapterId);
   if (translated && !regenerate)
     throw new AppError('ALREADY_TRANSLATED', 'Chapter already has an English translation', 409);
+  const provider = requireConfiguredProvider();
+  return enqueueTranslationJob(chapter, regenerate, origin, provider.revision, runAfter);
+}
+
+export function queueNovelTranslations(novelId: string): {
+  queued: number;
+  alreadyActive: number;
+  waitingForDownload: number;
+  totalUntranslated: number;
+  concurrency: number;
+} {
+  const sqlite = getDatabase().sqlite;
+  if (!sqlite.prepare('SELECT 1 FROM novels WHERE id=?').get(novelId))
+    throw new AppError('NOVEL_NOT_FOUND', 'Novel not found', 404);
+  const chapters = sqlite
+    .prepare(
+      `SELECT c.id,c.novel_id,c.ordinal,c.paragraphs,
+      EXISTS(SELECT 1 FROM translations t WHERE t.chapter_id=c.id) AS translated,
+      EXISTS(SELECT 1 FROM jobs j WHERE j.chapter_id=c.id AND j.kind='translate_chapter' AND j.status IN ('queued','running')) AS active
+      FROM chapters c WHERE c.novel_id=? ORDER BY c.ordinal,c.id`,
+    )
+    .all(novelId) as QueueChapterRow[];
+  const untranslated = chapters.filter((chapter) => chapter.translated === 0);
+  const ready = untranslated.filter((chapter) => chapter.paragraphs !== null);
+  const candidates = ready.filter((chapter) => chapter.active === 0);
   const provider = getProviderSettings();
-  if (!provider.baseUrl || !provider.model || !provider.hasApiKey)
+  if (candidates.length > 0 && (!provider.baseUrl || !provider.model || !provider.hasApiKey))
     throw new AppError('PROVIDER_NOT_CONFIGURED', 'Configure the translation provider first', 409);
-  return enqueueJob({
-    kind: 'translate_chapter',
-    payload: { chapterId, regenerate, providerRevision: provider.revision },
-    dedupeKey: `translate:${chapterId}`,
-    origin,
-    chapterId,
-  });
+  const baseRunAfter = Date.now();
+  sqlite.transaction(() => {
+    candidates.forEach((chapter, index) =>
+      enqueueTranslationJob(chapter, false, 'manual', provider.revision, baseRunAfter + index),
+    );
+  })();
+  return {
+    queued: candidates.length,
+    alreadyActive: ready.length - candidates.length,
+    waitingForDownload: untranslated.length - ready.length,
+    totalUntranslated: untranslated.length,
+    concurrency: provider.translationConcurrency,
+  };
 }
 
 function latestCompatibleRun(chapterId: string, revision: number, sourceHash: string): RunRow | undefined {
