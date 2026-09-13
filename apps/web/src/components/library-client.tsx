@@ -140,7 +140,7 @@ export function LibraryClient() {
         </label>
       </div>
       {message && (
-        <p className="rounded-[10px] border border-[color-mix(in_srgb,var(--color-warning)_30%,var(--color-line))] bg-[color-mix(in_srgb,var(--color-warning)_10%,var(--color-card))] px-3.5 py-3 text-warning">
+        <p className="rounded-[10px] border border-[color-mix(in_srgb,var(--color-warning)_30%,var(--color-line))] bg-[color-mix(in_srgb,var(--color-warning)_10%,var(--color-card))] mb-4 px-3.5 py-3 text-warning">
           {message}
         </p>
       )}
