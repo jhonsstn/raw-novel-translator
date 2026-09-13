@@ -34,6 +34,11 @@ export function listSourceDefinitions(): ConfigurableSourceDefinition[] {
   return rows.map(rowToDefinition);
 }
 
+function listEnabledSourceDefinitions(): ConfigurableSourceDefinition[] {
+  const rows = getDatabase().sqlite.prepare(`SELECT d.* FROM source_definitions d JOIN source_settings s ON s.source_id=d.source_id WHERE s.enabled=1 ORDER BY d.name,d.source_id`).all() as SourceDefinitionRow[];
+  return rows.map(rowToDefinition);
+}
+
 export function getSourceDefinition(sourceId: string): ConfigurableSourceDefinition {
   const row = getDatabase().sqlite.prepare('SELECT * FROM source_definitions WHERE source_id=?').get(sourceId) as SourceDefinitionRow | undefined;
   if (!row) throw new AppError('SOURCE_NOT_FOUND', 'Source not found', 404);
@@ -101,5 +106,5 @@ export function deleteSourceDefinition(sourceId: string): void {
   sqlite.transaction(() => { sqlite.prepare('DELETE FROM source_settings WHERE source_id=?').run(sourceId); sqlite.prepare('DELETE FROM source_definitions WHERE source_id=?').run(sourceId); })();
 }
 
-export function configuredSourceForUrl(url: URL): SourceAdapter { return sourceForUrl(url, listSourceDefinitions()); }
+export function configuredSourceForUrl(url: URL): SourceAdapter { return sourceForUrl(url, listEnabledSourceDefinitions()); }
 export function configuredSourceById(sourceId: string): SourceAdapter { return sourceById(sourceId, listSourceDefinitions()); }
