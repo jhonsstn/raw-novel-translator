@@ -1,5 +1,5 @@
 export interface ChapterRef { sourceChapterId: string; url: string; title: string; ordinal: number }
-export interface NovelRef { sourceNovelId: string; title: string; author: string | null; indexUrl: string }
+export interface NovelRef { sourceNovelId: string; indexUrl: string }
 export interface SourceContext { fetchHtml(url: string): Promise<string>; signal: AbortSignal }
 export interface SourceAdapter {
   id: string;
@@ -7,7 +7,7 @@ export interface SourceAdapter {
   version: string;
   hosts: readonly string[];
   matches(url: URL): boolean;
-  resolveChapter(url: URL, ctx: SourceContext): Promise<{ novel: NovelRef; chapter: ChapterRef }>;
+  resolveNovel(url: URL): NovelRef;
   listChapters(novel: NovelRef, ctx: SourceContext): Promise<ChapterRef[]>;
   fetchChapter(chapter: ChapterRef, ctx: SourceContext): Promise<{ title: string; paragraphs: string[] }>;
 }

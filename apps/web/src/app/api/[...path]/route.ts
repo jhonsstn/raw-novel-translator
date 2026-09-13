@@ -84,7 +84,13 @@ async function jsonBody<T>(request: Request, schema: ZodType<T>): Promise<T> {
 
 function jobResponse(job: { id: string }): Response { return json({ jobId: job.id }, 202); }
 
-const importSchema = z.object({ url: z.string().url(), includeStart: z.boolean().optional() }).strict();
+const importSchema = z.object({
+  url: z.string().url(),
+  includeStart: z.boolean(),
+  title: z.string().trim().min(1, 'Novel title is required').max(300, 'Novel title must be 300 characters or fewer'),
+  description: z.string().trim().max(10000, 'Description must be 10,000 characters or fewer').nullish().transform(value => value || null),
+  chapterNumber: z.number().int('Chapter number must be a whole number').min(1, 'Chapter number must be positive').max(Number.MAX_SAFE_INTEGER, 'Chapter number must be a safe integer'),
+}).strict();
 const automationSchema = z.object({ autoTranslate: z.boolean().optional(), autoCheck: z.boolean().optional() }).strict();
 const progressSchema = z.object({ chapterId: z.string().min(1), mode: z.enum(['source', 'en']), scrollRatio: z.number().finite(), completed: z.boolean().optional() }).strict();
 const translationSchema = z.object({ regenerate: z.boolean().optional() }).strict();
@@ -137,7 +143,7 @@ async function dispatch(request: Request, context: RouteContext): Promise<Respon
   if (method === 'GET' && path.length === 1 && path[0] === 'novels') return json(listNovels(url.searchParams.get('search') ?? ''));
   if (method === 'POST' && path.length === 1 && path[0] === 'imports') {
     const body = await jsonBody(request, importSchema);
-    return jobResponse(startImport({ url: body.url, includeStart: body.includeStart ?? false }));
+    return jobResponse(startImport(body));
   }
   if (path[0] === 'novels' && path.length === 2) {
     if (method === 'GET') return json(getNovel(path[1]!));

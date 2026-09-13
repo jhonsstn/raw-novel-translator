@@ -3,13 +3,30 @@ import { getDatabase } from '@novel/db';
 import { createSourceTransport, sourceById, sourceForUrl, type ChapterRef, type NovelRef, type SourceAdapter, type SourceContext } from '@novel/sources';
 import { AppError } from './errors.js';
 import { deferParentJob, enqueueJob, finalizeParentJob, type Job } from './jobs.js';
+import { normalizeNovelText } from './novel-metadata.js';
 
 interface NovelRow {
-  id: string; source_id: string; source_novel_id: string; title: string; author: string | null; index_url: string;
+  id: string; source_id: string; source_novel_id: string; index_url: string;
   start_chapter_url: string; start_ordinal: number; include_start: number;
 }
 interface ChapterRow { id: string; novel_id: string; source_chapter_id: string; canonical_url: string; ordinal: number; title: string; paragraphs: string | null }
-interface ResolvedChapter { novel: NovelRef; chapter: ChapterRef }
+export interface ImportInput { url: string; includeStart: boolean; title: string; description: string | null; chapterNumber: number }
+
+function normalizeImport(input: Record<string, unknown>): ImportInput {
+  if (typeof input.url !== 'string') throw new AppError('INVALID_URL', 'Enter a valid chapter URL');
+  if (typeof input.includeStart !== 'boolean') throw new AppError('INVALID_IMPORT', 'Choose whether to include the starting chapter');
+  if (typeof input.title !== 'string' || !input.title.trim()) throw new AppError('INVALID_TITLE', 'Novel title is required');
+  if (input.description !== null && input.description !== undefined && typeof input.description !== 'string') throw new AppError('INVALID_DESCRIPTION', 'Description must be text');
+  if (typeof input.chapterNumber !== 'number' || !Number.isSafeInteger(input.chapterNumber) || input.chapterNumber < 1) throw new AppError('INVALID_CHAPTER_NUMBER', 'Chapter number must be a positive safe integer');
+  const text = normalizeNovelText({ customTitle: input.title, description: input.description ?? null });
+  return { url: input.url, includeStart: input.includeStart, title: text.customTitle!, description: text.description, chapterNumber: input.chapterNumber };
+}
+
+function chapterOrdinal(anchor: number, offset: number): number {
+  const ordinal = anchor + offset;
+  if (!Number.isSafeInteger(ordinal) || ordinal < 1) throw new AppError('INVALID_CHAPTER_NUMBER', 'Chapter numbering would fall outside the positive safe integer range');
+  return ordinal;
+}
 
 function requireString(payload: Record<string, unknown>, key: string): string {
   const value = payload[key];
@@ -44,13 +61,18 @@ function contextFor(adapter: SourceAdapter, signal: AbortSignal): SourceContext 
   return { signal, fetchHtml: createSourceTransport({ signal, beforeRequest: (minimum) => reserveSourceRequest(adapter.id, minimum) }) };
 }
 
-export function startImport({ url, includeStart }: { url: string; includeStart: boolean }): Job {
+export function startImport(input: ImportInput): Job {
+  const normalized = normalizeImport({ ...input });
+  const { url } = normalized;
   let parsed: URL;
   try { parsed = new URL(url); } catch { throw new AppError('INVALID_URL', 'Enter a valid chapter URL'); }
+  parsed.hash = '';
   const adapter = sourceForUrl(parsed);
   const settings = getDatabase().sqlite.prepare('SELECT enabled FROM source_settings WHERE source_id=?').get(adapter.id);
   if (!settings || typeof settings !== 'object' || !('enabled' in settings) || settings.enabled !== 1) throw new AppError('SOURCE_DISABLED', 'This source is disabled', 409);
-  return enqueueJob({ kind: 'import', payload: { url: parsed.href, includeStart }, dedupeKey: `import:${parsed.href}:${includeStart}`, origin: 'manual' });
+  const payload = { ...normalized, url: parsed.href };
+  const key = createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+  return enqueueJob({ kind: 'import', payload, dedupeKey: `import:${key}`, origin: 'manual' });
 }
 
 export function queueCheckUpdates(novelId: string, origin: 'manual' | 'automatic' = 'manual'): Job {
@@ -59,46 +81,68 @@ export function queueCheckUpdates(novelId: string, origin: 'manual' | 'automatic
   return enqueueJob({ kind: 'check_updates', payload: { novelId }, dedupeKey: `check:${novelId}`, origin, novelId });
 }
 
-function saveDiscovery(adapter: SourceAdapter, inputUrl: string, includeStart: boolean, resolved: ResolvedChapter, listed: ChapterRef[]): { novelId: string; discovered: number; fetchChapterIds: string[] } {
+function saveDiscovery(adapter: SourceAdapter, input: ImportInput, novel: NovelRef, listed: ChapterRef[]): { novelId: string; discovered: number; fetchChapterIds: string[] } {
+  const inputBoundary = listed.findIndex((chapter) => chapter.url === input.url);
+  if (inputBoundary < 0) throw new AppError('SEED_NOT_IN_DIRECTORY', 'Submitted chapter is not present in the directory');
   const sqlite = getDatabase().sqlite;
   return sqlite.transaction(() => {
     const now = Date.now();
-    const existing = sqlite.prepare('SELECT * FROM novels WHERE source_id=? AND source_novel_id=?').get(adapter.id, resolved.novel.sourceNovelId) as NovelRow | undefined;
+    const existing = sqlite.prepare('SELECT * FROM novels WHERE source_id=? AND source_novel_id=?').get(adapter.id, novel.sourceNovelId) as NovelRow | undefined;
     const novelId = existing?.id ?? randomUUID();
+    let boundary = inputBoundary;
+    let includeStart = input.includeStart;
     if (existing) {
-      sqlite.prepare('UPDATE novels SET title=?,author=?,index_url=?,updated_at=? WHERE id=?').run(resolved.novel.title, resolved.novel.author, resolved.novel.indexUrl, now, novelId);
-    } else {
-      sqlite.prepare(`INSERT INTO novels(id,source_id,source_novel_id,title,author,index_url,start_chapter_url,start_ordinal,include_start,auto_translate,auto_check,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,0,0,?,?)`).run(novelId, adapter.id, resolved.novel.sourceNovelId, resolved.novel.title, resolved.novel.author, resolved.novel.indexUrl, inputUrl, resolved.chapter.ordinal, includeStart ? 1 : 0, now, now);
+      const previousBoundary = listed.findIndex((chapter) => chapter.url === existing.start_chapter_url);
+      if (previousBoundary < 0) throw new AppError('IMPORT_BOUNDARY_MISSING', 'Saved import boundary is missing from the source');
+      if (previousBoundary < boundary) {
+        boundary = previousBoundary;
+        includeStart = existing.include_start === 1;
+      } else if (previousBoundary === boundary) {
+        includeStart ||= existing.include_start === 1;
+      }
     }
-    const boundary = listed.findIndex((chapter) => chapter.url === resolved.chapter.url);
-    if (boundary < 0) throw new AppError('SEED_NOT_IN_DIRECTORY', 'Submitted chapter is not present in the directory');
-    const selected = listed.slice(boundary + (includeStart ? 0 : 1));
+    const startOrdinal = chapterOrdinal(input.chapterNumber, boundary - inputBoundary);
+    if (existing) {
+      sqlite.prepare('UPDATE novels SET title=?,custom_title=?,description=?,index_url=?,start_chapter_url=?,start_ordinal=?,include_start=?,updated_at=? WHERE id=?')
+        .run(input.title, input.title, input.description, novel.indexUrl, listed[boundary]!.url, startOrdinal, includeStart ? 1 : 0, now, novelId);
+    } else {
+      sqlite.prepare(`INSERT INTO novels(id,source_id,source_novel_id,title,description,index_url,start_chapter_url,start_ordinal,include_start,auto_translate,auto_check,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,0,0,?,?)`).run(novelId, adapter.id, novel.sourceNovelId, input.title, input.description, novel.indexUrl, input.url, startOrdinal, includeStart ? 1 : 0, now, now);
+    }
+    const first = boundary + (includeStart ? 0 : 1);
     const fetchChapterIds: string[] = [];
-    for (const reference of selected) {
+    for (let index = 0; index < listed.length; index += 1) {
+      const reference = listed[index]!;
       const known = sqlite.prepare('SELECT * FROM chapters WHERE novel_id=? AND source_chapter_id=?').get(novelId, reference.sourceChapterId) as ChapterRow | undefined;
+      if (!known && index < first) continue;
+      const ordinal = chapterOrdinal(input.chapterNumber, index - inputBoundary);
       if (known) {
-        sqlite.prepare('UPDATE chapters SET canonical_url=?,ordinal=?,title=?,updated_at=? WHERE id=?').run(reference.url, reference.ordinal, reference.title, now, known.id);
-        if (known.paragraphs === null) fetchChapterIds.push(known.id);
+        sqlite.prepare('UPDATE chapters SET canonical_url=?,ordinal=?,title=?,updated_at=? WHERE id=?').run(reference.url, ordinal, reference.title, now, known.id);
+        if (known.paragraphs === null && index >= first) fetchChapterIds.push(known.id);
       } else {
         const id = randomUUID();
-        sqlite.prepare('INSERT INTO chapters(id,novel_id,source_chapter_id,canonical_url,ordinal,title,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)').run(id, novelId, reference.sourceChapterId, reference.url, reference.ordinal, reference.title, now, now);
+        sqlite.prepare('INSERT INTO chapters(id,novel_id,source_chapter_id,canonical_url,ordinal,title,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)').run(id, novelId, reference.sourceChapterId, reference.url, ordinal, reference.title, now, now);
         fetchChapterIds.push(id);
       }
     }
-    return { novelId, discovered: selected.length, fetchChapterIds };
+    return { novelId, discovered: listed.length - first, fetchChapterIds };
   })();
 }
 
 export async function handleImportJob(job: Job, signal: AbortSignal): Promise<{ deferred: boolean }> {
   if (!job.leaseToken) throw new AppError('INVALID_LEASE', 'Import job has no lease', 500);
-  const url = requireString(job.payload, 'url');
-  const includeStart = job.payload.includeStart === true;
-  const adapter = sourceForUrl(new URL(url));
+  if (typeof job.payload.title !== 'string' || typeof job.payload.chapterNumber !== 'number') {
+    throw new AppError('INVALID_JOB', 'This import predates manual novel details. Re-add it using the Add novel modal with a title and chapter number.');
+  }
+  const input = normalizeImport(job.payload);
+  const url = new URL(input.url);
+  url.hash = '';
+  input.url = url.href;
+  const adapter = sourceForUrl(url);
   const context = contextFor(adapter, signal);
-  const resolved = await adapter.resolveChapter(new URL(url), context);
-  const listed = await adapter.listChapters(resolved.novel, context);
-  const result = saveDiscovery(adapter, url, includeStart, resolved, listed);
+  const novel = adapter.resolveNovel(url);
+  const listed = await adapter.listChapters(novel, context);
+  const result = saveDiscovery(adapter, input, novel, listed);
   for (const chapterId of result.fetchChapterIds) enqueueJob({ kind: 'fetch_chapter', payload: { chapterId }, dedupeKey: `fetch:${chapterId}`, parentJobId: job.id, novelId: result.novelId, chapterId });
   const progress = { discovered: result.discovered, queued: result.fetchChapterIds.length, message: result.discovered === 0 ? 'No later chapters available' : undefined, novelId: result.novelId };
   if (result.fetchChapterIds.length === 0) {
@@ -118,21 +162,24 @@ export async function handleCheckUpdatesJob(job: Job, signal: AbortSignal): Prom
   if (!novel) throw new AppError('NOVEL_NOT_FOUND', 'Novel not found', 404);
   const adapter = sourceById(novel.source_id);
   const context = contextFor(adapter, signal);
-  const listed = await adapter.listChapters({ sourceNovelId: novel.source_novel_id, title: novel.title, author: novel.author, indexUrl: novel.index_url }, context);
+  const listed = await adapter.listChapters({ sourceNovelId: novel.source_novel_id, indexUrl: novel.index_url }, context);
   const boundary = listed.findIndex((chapter) => chapter.url === novel.start_chapter_url);
   if (boundary < 0) throw new AppError('IMPORT_BOUNDARY_MISSING', 'Saved import boundary is missing from the source');
   const selected = listed.slice(boundary + (novel.include_start ? 0 : 1));
   const now = Date.now();
   const missing = sqlite.transaction(() => {
     const ids: string[] = [];
-    for (const reference of selected) {
+    for (let index = 0; index < selected.length; index += 1) {
+      const reference = selected[index]!;
+      const ordinal = novel.start_ordinal + index + (novel.include_start ? 0 : 1);
+      if (!Number.isSafeInteger(ordinal)) throw new AppError('INVALID_CHAPTER_NUMBER', 'Chapter numbering exceeds the safe integer range');
       const row = sqlite.prepare('SELECT * FROM chapters WHERE novel_id=? AND source_chapter_id=?').get(novelId, reference.sourceChapterId) as ChapterRow | undefined;
       if (row) {
-        sqlite.prepare('UPDATE chapters SET canonical_url=?,ordinal=?,title=?,updated_at=? WHERE id=?').run(reference.url, reference.ordinal, reference.title, now, row.id);
+        sqlite.prepare('UPDATE chapters SET canonical_url=?,ordinal=?,title=?,updated_at=? WHERE id=?').run(reference.url, ordinal, reference.title, now, row.id);
         if (row.paragraphs === null) ids.push(row.id);
       } else {
         const id = randomUUID();
-        sqlite.prepare('INSERT INTO chapters(id,novel_id,source_chapter_id,canonical_url,ordinal,title,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)').run(id, novelId, reference.sourceChapterId, reference.url, reference.ordinal, reference.title, now, now);
+        sqlite.prepare('INSERT INTO chapters(id,novel_id,source_chapter_id,canonical_url,ordinal,title,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)').run(id, novelId, reference.sourceChapterId, reference.url, ordinal, reference.title, now, now);
         ids.push(id);
       }
     }
@@ -163,12 +210,12 @@ export async function handleSourceCheckJob(job: Job, signal: AbortSignal): Promi
   const sourceId = requireString(job.payload, 'sourceId');
   const adapter = sourceById(sourceId);
   const sqlite = getDatabase().sqlite;
-  const known = sqlite.prepare('SELECT source_novel_id,title,author,index_url FROM novels WHERE source_id=? ORDER BY created_at LIMIT 1').get(sourceId);
+  const known = sqlite.prepare('SELECT source_novel_id,index_url FROM novels WHERE source_id=? ORDER BY created_at LIMIT 1').get(sourceId);
   const context = contextFor(adapter, signal);
   try {
     let progress: Record<string, unknown>;
-    if (known && typeof known === 'object' && 'source_novel_id' in known && 'title' in known && 'author' in known && 'index_url' in known && typeof known.source_novel_id === 'string' && typeof known.title === 'string' && (known.author === null || typeof known.author === 'string') && typeof known.index_url === 'string') {
-      const chapters = await adapter.listChapters({ sourceNovelId: known.source_novel_id, title: known.title, author: known.author, indexUrl: known.index_url }, context);
+    if (known && typeof known === 'object' && 'source_novel_id' in known && 'index_url' in known && typeof known.source_novel_id === 'string' && typeof known.index_url === 'string') {
+      const chapters = await adapter.listChapters({ sourceNovelId: known.source_novel_id, indexUrl: known.index_url }, context);
       progress = { ok: true, checkedAt: Date.now(), chapters: chapters.length };
     } else {
       const html = await context.fetchHtml(`https://${adapter.hosts[0]}/`);

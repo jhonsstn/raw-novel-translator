@@ -9,7 +9,7 @@ interface NormalizedCover { bytes: Buffer; hash: string; width: number; height: 
 
 function codePointLength(value: string): number { return Array.from(value).length; }
 
-function normalizeText(input: NovelMetadataInput): { customTitle: string | null; description: string | null } {
+export function normalizeNovelText(input: Pick<NovelMetadataInput, 'customTitle' | 'description'>): { customTitle: string | null; description: string | null } {
   const customTitle = input.customTitle?.trim() ?? null;
   if (input.customTitle !== null && !customTitle) throw new AppError('INVALID_TITLE', 'Custom title cannot be blank; use source title instead');
   if (customTitle && codePointLength(customTitle) > 300) throw new AppError('INVALID_TITLE', 'Custom title is limited to 300 characters');
@@ -46,7 +46,7 @@ export async function normalizeCover(bytes: Uint8Array): Promise<NormalizedCover
 export async function updateNovelMetadata(novelId: string, input: NovelMetadataInput): Promise<void> {
   const sqlite = getDatabase().sqlite;
   if (!sqlite.prepare('SELECT 1 FROM novels WHERE id=?').get(novelId)) throw new AppError('NOVEL_NOT_FOUND', 'Novel not found', 404);
-  const text = normalizeText(input);
+  const text = normalizeNovelText(input);
   const cover = input.cover.action === 'replace' ? await normalizeCover(input.cover.bytes) : null;
   sqlite.transaction(() => {
     const now = Date.now();

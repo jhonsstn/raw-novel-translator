@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import type { ChapterRef, NovelRef, SourceAdapter, SourceContext } from './types.js';
+import type { ChapterRef, SourceAdapter } from './types.js';
 import { SourceError } from './types.js';
 
 const CHAPTER_PATH = /^\/html\/(\d+)\/(\d+)\/(\d+)\.html$/;
@@ -35,13 +35,10 @@ function normalizeText(value: string): string {
   return value.replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').trim();
 }
 
-export function parseDirectory(html: string, indexUrl: string): { novel: NovelRef; chapters: ChapterRef[] } {
+export function parseDirectory(html: string, indexUrl: string): ChapterRef[] {
   const $ = load(html);
   const base = new URL(indexUrl);
   const identity = sourceIdentity(base.pathname);
-  const novelTitle = normalizeText($('h1 > a').first().text()) || normalizeText($('meta[property="og:novel:book_name"]').attr('content') ?? '');
-  if (!novelTitle) throw new SourceError('SOURCE_LAYOUT_CHANGED', 'Novel title is missing from the directory');
-  const author = normalizeText($('meta[name="author"]').attr('content') ?? '') || null;
   const seen = new Set<string>();
   const chapters: ChapterRef[] = [];
   $('.centent ul li a').each((_index, element) => {
@@ -58,7 +55,7 @@ export function parseDirectory(html: string, indexUrl: string): { novel: NovelRe
     chapters.push({ sourceChapterId: chapterId(url), url: canonical, title, ordinal: chapters.length });
   });
   if (chapters.length === 0) throw new SourceError('SOURCE_LAYOUT_CHANGED', 'No chapter links were found in the directory');
-  return { novel: { sourceNovelId: identity, title: novelTitle, author, indexUrl: new URL(`https://www.piaotia.com/html/${identity}/index.html`).href }, chapters };
+  return chapters;
 }
 
 function sourceIdentityOrNull(pathname: string): string | null {
@@ -73,13 +70,12 @@ function indexed(node: unknown, label: string): IndexedPosition {
   return { startIndex: node.startIndex, endIndex: node.endIndex };
 }
 
-export function parseChapter(html: string): { novelTitle: string; title: string; paragraphs: string[] } {
+export function parseChapter(html: string): { title: string; paragraphs: string[] } {
   if (/cf-chl-|captcha|attention required/i.test(html) && html.length < 100_000) throw new SourceError('SOURCE_BLOCKED', 'Piaotia returned a challenge page');
   const $ = load(html);
   const heading = $('h1').first();
-  const novelTitle = normalizeText(heading.find('a').first().text());
   const title = normalizeText(heading.clone().find('a').remove().end().text());
-  if (!novelTitle || !title) throw new SourceError('SOURCE_LAYOUT_CHANGED', 'Chapter heading is missing');
+  if (!title) throw new SourceError('SOURCE_LAYOUT_CHANGED', 'Chapter heading is missing');
   const top = $('.toplink').first();
   const bottom = $('.bottomlink').first();
   if (!top.length || !bottom.length) throw new SourceError('SOURCE_LAYOUT_CHANGED', 'Chapter navigation anchors are missing');
@@ -95,25 +91,18 @@ export function parseChapter(html: string): { novelTitle: string; title: string;
   body('script,style,table,iframe,a').remove();
   const paragraphs = body('main').text().split(/\r?\n+/).map(normalizeText).filter(Boolean);
   if (paragraphs.length === 0) throw new SourceError('SOURCE_LAYOUT_CHANGED', 'Chapter body is empty');
-  return { novelTitle, title, paragraphs };
+  return { title, paragraphs };
 }
 
 export const piaotia: SourceAdapter = {
   id: 'piaotia', name: 'Piaotia', version: '1.0.0', hosts: ['www.piaotia.com'],
   matches(url) { try { canonicalChapterUrl(url); return true; } catch { return false; } },
-  async resolveChapter(url, ctx) {
+  resolveNovel(url) {
     const canonical = canonicalChapterUrl(url);
     const identity = sourceIdentity(canonical.pathname);
-    const indexUrl = `https://www.piaotia.com/html/${identity}/index.html`;
-    const [chapterHtml, directoryHtml] = await Promise.all([ctx.fetchHtml(canonical.href), ctx.fetchHtml(indexUrl)]);
-    const parsedChapter = parseChapter(chapterHtml);
-    const directory = parseDirectory(directoryHtml, indexUrl);
-    const chapter = directory.chapters.find((item) => item.url === canonical.href);
-    if (!chapter) throw new SourceError('SEED_NOT_IN_DIRECTORY', 'Submitted chapter is not present in the novel directory');
-    if (parsedChapter.novelTitle !== directory.novel.title) throw new SourceError('SOURCE_LAYOUT_CHANGED', 'Chapter and directory novel titles differ');
-    return { novel: directory.novel, chapter };
+    return { sourceNovelId: identity, indexUrl: `https://www.piaotia.com/html/${identity}/index.html` };
   },
-  async listChapters(novel, ctx) { return parseDirectory(await ctx.fetchHtml(novel.indexUrl), novel.indexUrl).chapters; },
+  async listChapters(novel, ctx) { return parseDirectory(await ctx.fetchHtml(novel.indexUrl), novel.indexUrl); },
   async fetchChapter(chapter, ctx) {
     const parsed = parseChapter(await ctx.fetchHtml(chapter.url));
     return { title: parsed.title, paragraphs: parsed.paragraphs };
