@@ -135,8 +135,7 @@ const readerThemeOptions = [
   { value: 'dark', label: 'Dark' },
 ] as const;
 
-export function SettingsClient() {
-  const [tab, setTab] = useState<Tab>('General');
+export function SettingsClient({ tab }: { tab: Tab }) {
   const [provider, setProvider] = useState<Provider | null>(null);
   const [sources, setSources] = useState<Source[]>([]);
   const [health, setHealth] = useState<Health | null>(null);
@@ -329,7 +328,7 @@ export function SettingsClient() {
         Loading settings…
       </div>
     );
-  const tabs: Tab[] = ['General', 'Provider', 'Sources', 'Automation', 'Reader'];
+
   const providerTest = jobActions['provider-test'];
   const providerTestActive = isJobFeedbackActive(providerTest);
   const providerTestLabel =
@@ -353,30 +352,6 @@ export function SettingsClient() {
     providerTest?.state === 'failed' || providerTest?.state === 'cancelled' || providerTest?.state === 'request-error';
   return (
     <>
-      <section className="mb-8 flex items-end justify-between gap-8 max-[760px]:flex-col max-[760px]:items-start max-[760px]:gap-5">
-        <div className="max-w-[760px]">
-          <div className="mb-2.5 text-[11px] font-extrabold uppercase tracking-[.15em] text-accent-ink">
-            Configuration
-          </div>
-          <h1>Settings</h1>
-          <p className="mt-[13px] max-w-[660px] text-muted">
-            Credentials stay encrypted at rest and never return to the browser.
-          </p>
-        </div>
-      </section>
-      <div className="mb-[22px] flex w-fit max-w-full overflow-x-auto rounded-[11px] border border-line bg-paper-raised p-[3px]">
-        {tabs.map((item) => (
-          <button
-            key={item}
-            className={`min-h-[34px] whitespace-nowrap rounded-lg border-0 bg-transparent px-[13px] text-[13px] font-[650] text-muted hover:text-ink ${
-              tab === item ? 'bg-card text-ink-strong shadow-[0_1px_4px_rgb(0_0_0/10%)]' : ''
-            }`}
-            onClick={() => setTab(item)}
-          >
-            {item}
-          </button>
-        ))}
-      </div>
       {message && (
         <div
           className="mb-4 rounded-[10px] border border-[color-mix(in_srgb,var(--color-warning)_30%,var(--color-line))] bg-[color-mix(in_srgb,var(--color-warning)_10%,var(--color-card))] px-3.5 py-3 text-warning"
