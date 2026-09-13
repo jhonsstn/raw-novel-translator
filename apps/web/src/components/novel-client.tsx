@@ -23,6 +23,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useJobFeedback, isJobFeedbackActive } from '../lib/use-job-feedback';
+import { SelectMenu } from './select-menu';
 
 interface Chapter {
   id: string;
@@ -627,22 +628,21 @@ export function NovelClient({ novelId }: { novelId: string }) {
                 }}
               />
             </label>
-            <label className="max-[560px]:w-full">
-              <span className="sr-only">Filter chapters</span>
-              <select
-                className={`${inputClass} min-w-48 max-[560px]:min-w-0`}
-                value={filter}
-                onChange={(event) => {
-                  setFilter(chapterFilter(event.target.value));
-                  setPage(1);
-                }}
-              >
-                <option value="all">All chapters ({novel.chapterCount})</option>
-                <option value="unread">Unread ({unreadCount})</option>
-                <option value="downloaded">Downloaded ({novel.downloadedCount})</option>
-                <option value="translated">English ready ({novel.translatedCount})</option>
-              </select>
-            </label>
+            <SelectMenu
+              className="min-w-48 max-[560px]:w-full"
+              ariaLabel="Filter chapters"
+              value={filter}
+              options={[
+                { value: 'all', label: `All chapters (${novel.chapterCount})` },
+                { value: 'unread', label: `Unread (${unreadCount})` },
+                { value: 'downloaded', label: `Downloaded (${novel.downloadedCount})` },
+                { value: 'translated', label: `English ready (${novel.translatedCount})` },
+              ]}
+              onChange={(value) => {
+                setFilter(chapterFilter(value));
+                setPage(1);
+              }}
+            />
           </div>
         </header>
         <div className="border-t border-line">

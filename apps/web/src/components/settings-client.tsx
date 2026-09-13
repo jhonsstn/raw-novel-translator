@@ -2,6 +2,7 @@
 import { CheckCircle2, Link, Loader2, Pause, Play, Plus, Save, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useJobFeedback, isJobFeedbackActive } from '../lib/use-job-feedback';
+import { SelectMenu } from './select-menu';
 
 interface Provider {
   baseUrl: string | null;
@@ -124,6 +125,15 @@ const panelClass = 'rounded-[15px] border border-line bg-card p-[22px] text-ink 
 const fieldClass = 'grid gap-[7px] text-xs font-[720] text-ink';
 const switchClass =
   "h-6 w-11 shrink-0 rounded-full border-0 bg-line-strong p-[3px] after:block after:size-[18px] after:rounded-full after:bg-white after:shadow-[0_1px_3px_rgb(0_0_0/25%)] after:transition-transform after:duration-200 after:content-['']";
+const readerLineHeightOptions = [
+  { value: '1.65', label: 'Compact' },
+  { value: '1.85', label: 'Comfortable' },
+  { value: '2.05', label: 'Spacious' },
+] as const;
+const readerThemeOptions = [
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+] as const;
 
 export function SettingsClient() {
   const [tab, setTab] = useState<Tab>('General');
@@ -407,7 +417,9 @@ export function SettingsClient() {
         <form className={`${panelClass} grid gap-4`} onSubmit={saveProvider}>
           <div>
             <h2>Translation provider</h2>
-            <p className="mt-1 text-sm text-muted">Configure generation limits and how many chapters may translate at the same time.</p>
+            <p className="mt-1 text-sm text-muted">
+              Configure generation limits and how many chapters may translate at the same time.
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-3.5 max-[760px]:grid-cols-1">
             <label className={fieldClass}>
@@ -837,25 +849,19 @@ export function SettingsClient() {
                 onChange={(event) => setFontSize(Number(event.target.value))}
               />
             </label>
-            <label className={fieldClass}>
-              Line height
-              <select
-                className={inputClass}
-                value={lineHeight}
-                onChange={(event) => setLineHeight(Number(event.target.value))}
-              >
-                <option value="1.65">Compact</option>
-                <option value="1.85">Comfortable</option>
-                <option value="2.05">Spacious</option>
-              </select>
-            </label>
-            <label className={fieldClass}>
-              Theme
-              <select className={inputClass} value={theme} onChange={(event) => setTheme(event.target.value)}>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
-            </label>
+            <div className={fieldClass}>
+              <span>Line height</span>
+              <SelectMenu
+                ariaLabel="Line height"
+                value={String(lineHeight)}
+                options={readerLineHeightOptions}
+                onChange={(value) => setLineHeight(Number(value))}
+              />
+            </div>
+            <div className={fieldClass}>
+              <span>Theme</span>
+              <SelectMenu ariaLabel="Reader theme" value={theme} options={readerThemeOptions} onChange={setTheme} />
+            </div>
           </div>
           <button className={`${primaryButtonClass} w-fit`} onClick={saveReader}>
             <Save size={16} /> Save reader defaults

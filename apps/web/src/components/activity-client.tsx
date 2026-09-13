@@ -1,6 +1,7 @@
 'use client';
 import { Check, Copy, RefreshCw, RotateCcw, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { SelectMenu } from './select-menu';
 
 interface Activity {
   id: string;
@@ -84,6 +85,14 @@ const buttonClass =
   'inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] border border-line bg-card px-3.5 text-[13px] font-bold text-ink transition-[transform,border-color,background-color,box-shadow] duration-150 enabled:hover:-translate-y-px enabled:hover:border-line-strong enabled:hover:bg-card-hover enabled:hover:shadow-button';
 const errorClass =
   'rounded-[10px] border border-[color-mix(in_srgb,var(--color-danger)_35%,var(--color-line))] bg-danger-soft px-3.5 py-3 text-danger';
+const activityStatusOptions = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'queued', label: 'Queued' },
+  { value: 'running', label: 'Running' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'succeeded', label: 'Succeeded' },
+  { value: 'cancelled', label: 'Cancelled' },
+] as const;
 
 function JobDetails({ item, refresh }: { item: Activity; refresh: number }) {
   const [events, setEvents] = useState<JobEvent[] | null>(null);
@@ -355,22 +364,16 @@ export function ActivityClient() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-[9px]">
-          <select
-            className="w-full rounded-[10px] border border-line bg-card px-[13px] py-[11px] text-ink outline-none transition duration-150 hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-accent)_18%,transparent)]"
-            aria-label="Filter jobs by status"
+          <SelectMenu
+            className="w-44 max-[520px]:w-full"
+            ariaLabel="Filter jobs by status"
             value={filter}
-            onChange={(event) => {
-              setFilter(event.target.value);
+            options={activityStatusOptions}
+            onChange={(value) => {
+              setFilter(value);
               setPage(1);
             }}
-          >
-            <option value="all">All statuses</option>
-            <option value="queued">Queued</option>
-            <option value="running">Running</option>
-            <option value="failed">Failed</option>
-            <option value="succeeded">Succeeded</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
+          />
           <button className={buttonClass} onClick={() => void load(true)}>
             <RefreshCw size={16} /> Refresh
           </button>

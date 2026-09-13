@@ -1,6 +1,7 @@
 'use client';
 import { CheckCircle2, Loader2, Play, Save, Volume2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { SelectMenu } from './select-menu';
 
 interface TtsSettings {
   baseUrl: string | null;
@@ -112,7 +113,7 @@ export function TtsSettingsPanel() {
       const value: unknown = await response.json();
       if (response.ok && isTtsSettings(value)) {
         setSettings(value);
-        setLanguage(value.language ?? 'all');
+        setLanguage(value.language || 'all');
       } else setError(apiError(value, 'Could not load TTS settings.'));
     })();
     void loadCatalog();
@@ -125,6 +126,11 @@ export function TtsSettingsPanel() {
   async function save(event: React.FormEvent) {
     event.preventDefault();
     if (!settings || saving) return;
+    if (!settings.model || !settings.voice) {
+      setMessage('');
+      setError(!settings.model ? 'Select a TTS model.' : 'Select a TTS voice.');
+      return;
+    }
     setSaving(true);
     setError('');
     setMessage('');
@@ -202,6 +208,10 @@ export function TtsSettingsPanel() {
     : settings.model
       ? [{ id: settings.model, label: `${settings.model} (saved)` }, ...catalog.models]
       : catalog.models;
+  const savedLanguageOption =
+    language !== 'all' && !availableLanguages.includes(language)
+      ? [{ value: language, label: `${language} (saved)` }]
+      : [];
   return (
     <div className="grid gap-4">
       {message && (
@@ -250,22 +260,19 @@ export function TtsSettingsPanel() {
               onChange={(event) => setSettings({ ...settings, baseUrl: event.target.value })}
             />
           </label>
-          <label className={fieldClass}>
-            Model
-            <select
-              className={inputClass}
+          <div className={fieldClass}>
+            <span>Model</span>
+            <SelectMenu
+              ariaLabel="TTS model"
               required
               value={settings.model ?? ''}
-              onChange={(event) => setSettings({ ...settings, model: event.target.value })}
-            >
-              <option value="">Select a model</option>
-              {modelOptions.map((model) => (
-                <option value={model.id} key={model.id}>
-                  {model.label}
-                </option>
-              ))}
-            </select>
-          </label>
+              options={[
+                { value: '', label: 'Select a model' },
+                ...modelOptions.map((model) => ({ value: model.id, label: model.label })),
+              ]}
+              onChange={(value) => setSettings({ ...settings, model: value })}
+            />
+          </div>
           <label className={fieldClass}>
             API key
             <input
@@ -276,44 +283,38 @@ export function TtsSettingsPanel() {
               onChange={(event) => setApiKey(event.target.value)}
             />
           </label>
-          <label className={fieldClass}>
-            Language / locale
-            <select
-              className={inputClass}
+          <div className={fieldClass}>
+            <span>Language / locale</span>
+            <SelectMenu
+              ariaLabel="Language or locale"
               value={language}
-              onChange={(event) => {
-                const selectedLanguage = event.target.value;
+              options={[
+                { value: 'all', label: 'All languages' },
+                ...savedLanguageOption,
+                ...availableLanguages.map((value) => ({ value, label: value })),
+              ]}
+              onChange={(selectedLanguage) => {
                 setLanguage(selectedLanguage);
                 void loadVoices(selectedLanguage).then((voices) => {
                   const firstVoice = voices[0];
                   if (firstVoice) setSettings((current) => (current ? { ...current, voice: firstVoice.id } : current));
                 });
               }}
-            >
-              <option value="all">All languages</option>
-              {availableLanguages.map((value) => (
-                <option value={value} key={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={fieldClass}>
-            Voice
-            <select
-              className={inputClass}
+            />
+          </div>
+          <div className={fieldClass}>
+            <span>Voice</span>
+            <SelectMenu
+              ariaLabel="TTS voice"
               required
               value={settings.voice}
-              onChange={(event) => setSettings({ ...settings, voice: event.target.value })}
-            >
-              {voiceOptions.map((voice) => (
-                <option value={voice.id} key={voice.id}>
-                  {voice.label}
-                  {voice.locale ? ` (${voice.locale})` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
+              options={voiceOptions.map((voice) => ({
+                value: voice.id,
+                label: `${voice.label}${voice.locale ? ` (${voice.locale})` : ''}`,
+              }))}
+              onChange={(value) => setSettings({ ...settings, voice: value })}
+            />
+          </div>
           <label className={fieldClass}>
             Timeout (seconds)
             <input
