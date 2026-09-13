@@ -2,6 +2,7 @@
 import { ArrowLeft, ArrowRight, Check, Languages, List, Moon, Sun } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ReaderTtsControls } from './reader-tts-controls';
 
 interface Chapter {
   id: string;
@@ -298,6 +299,16 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
           {error}
         </div>
       )}
+      <ReaderTtsControls
+        chapterId={chapter.id}
+        language={mode}
+        paragraphs={paragraphs}
+        contentRef={contentRef}
+        hasNextChapter={Boolean(next)}
+        onAutoNext={async () => {
+          if (next) await go(next, true);
+        }}
+      />
       <article
         className={`mx-auto h-[calc(100vh_-_260px)] min-h-[360px] w-[min(780px,100%)] overflow-auto rounded-[15px] border border-line p-[clamp(26px,5vw,60px)] font-serif shadow-card max-[760px]:h-[calc(100vh_-_350px)] max-[760px]:min-h-80 max-[760px]:px-[19px] max-[760px]:py-[26px] [&_p]:mb-[1.25em] ${
           dark ? 'bg-[#171719] text-[#ededf0]' : 'bg-white text-[#222226]'
