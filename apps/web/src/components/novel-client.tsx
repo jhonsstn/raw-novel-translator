@@ -69,6 +69,8 @@ export function NovelClient({ novelId }: { novelId: string }) {
   const [description, setDescription] = useState('');
   const [cover, setCover] = useState<File | null>(null);
   const [removeCover, setRemoveCover] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'unread' | 'downloaded' | 'translated'>('all');
   const [page, setPage] = useState(1);
@@ -154,10 +156,15 @@ export function NovelClient({ novelId }: { novelId: string }) {
     } else setError('Metadata update failed');
   }
   async function remove() {
-    if (!confirm('Delete this novel, its chapters, translations, and progress?')) return;
+    if (deleting) return;
+    setDeleting(true);
     const response = await fetch(`/api/novels/${novelId}`, { method: 'DELETE' });
     if (response.ok) router.push('/');
-    else setError('Delete failed');
+    else {
+      setDeleting(false);
+      setDeleteConfirmOpen(false);
+      setError('Delete failed');
+    }
   }
   function check() {
     return startJob('check-updates', `/api/novels/${novelId}/check`);
@@ -368,7 +375,11 @@ export function NovelClient({ novelId }: { novelId: string }) {
           <button className={buttonClass} onClick={openMetadata}>
             <Pencil size={16} /> Edit
           </button>
-          <button className={`${buttonClass} text-danger`} aria-label="Delete novel" onClick={() => void remove()}>
+          <button
+            className={`${buttonClass} text-danger`}
+            aria-label="Delete novel"
+            onClick={() => setDeleteConfirmOpen(true)}
+          >
             <Trash2 size={16} />
           </button>
         </div>
@@ -601,6 +612,41 @@ export function NovelClient({ novelId }: { novelId: string }) {
                 Save details
               </button>
             </form>
+          </div>
+        </div>
+      )}
+      {deleteConfirmOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-overlay p-5 backdrop-blur-lg">
+          <div
+            className="w-[min(460px,100%)] rounded-2xl border border-line bg-card p-6 text-ink shadow-float"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-novel-title"
+            aria-describedby="delete-novel-description"
+          >
+            <h2 id="delete-novel-title">Delete this novel?</h2>
+            <p id="delete-novel-description" className="mt-2.5 text-muted">
+              This permanently deletes the novel, its chapters, translations, reading progress, and cover image.
+            </p>
+            <div className="mt-6 flex justify-end gap-2.5">
+              <button
+                className={buttonClass}
+                type="button"
+                disabled={deleting}
+                onClick={() => setDeleteConfirmOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className={`${buttonClass} border-danger bg-danger text-white hover:border-danger hover:bg-danger`}
+                type="button"
+                disabled={deleting}
+                onClick={() => void remove()}
+              >
+                {deleting ? <Loader2 className="animate-spin" size={16} /> : <Trash2 size={16} />}
+                {deleting ? 'Deleting…' : 'Delete novel'}
+              </button>
+            </div>
           </div>
         </div>
       )}
