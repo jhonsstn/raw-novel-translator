@@ -233,8 +233,8 @@ export function updateTtsSettings(input: UpdateTtsSettingsInput): TtsSettingsVie
   const pitch = input.pitch ?? current.pitch;
   const timeout = input.timeoutSeconds ?? current.timeout_seconds;
   if (!voice || voice.length > 100) throw new AppError('INVALID_TTS_VOICE', 'Voice must be 1–100 characters');
-  if (!Number.isFinite(speed) || speed < 0.25 || speed > 4)
-    throw new AppError('INVALID_TTS_SPEED', 'TTS speed must be between 0.25× and 4×');
+  if (!Number.isFinite(speed) || speed < 0.25 || speed > 2)
+    throw new AppError('INVALID_TTS_SPEED', 'TTS speed must be between 0.25× and 2×');
   if (!Number.isInteger(pitch) || pitch < -12 || pitch > 12)
     throw new AppError('INVALID_TTS_PITCH', 'TTS pitch must be between -12 and +12 semitones');
   if (!Number.isInteger(timeout) || timeout < 10 || timeout > 300)

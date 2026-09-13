@@ -13,7 +13,7 @@ const schema = z
     apiKey: z.string().max(1000).optional(),
     clearApiKey: z.boolean().optional(),
     voice: z.string().trim().min(1).max(100).optional(),
-    speed: z.number().finite().min(0.25).max(4).optional(),
+    speed: z.number().finite().min(0.25).max(2).optional(),
     pitch: z.number().int().min(-12).max(12).optional(),
     timeoutSeconds: z.number().int().min(10).max(300).optional(),
   })

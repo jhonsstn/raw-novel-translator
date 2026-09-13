@@ -336,8 +336,8 @@ export function TtsSettingsPanel() {
               className="accent-[var(--color-accent)]"
               type="range"
               min="0.25"
-              max="4"
-              step="0.05"
+              max="2"
+              step="0.01"
               value={settings.speed}
               onChange={(event) => setSettings({ ...settings, speed: Number(event.target.value) })}
             />

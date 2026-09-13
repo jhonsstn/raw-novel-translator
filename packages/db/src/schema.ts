@@ -203,7 +203,7 @@ export const ttsSettings = sqliteTable(
   },
   (t) => [
     check('tts_singleton', sql`${t.id} = 1`),
-    check('tts_speed_range', sql`${t.speed} BETWEEN 0.25 AND 4.0`),
+    check('tts_speed_range', sql`${t.speed} BETWEEN 0.25 AND 2.0`),
     check('tts_pitch_range', sql`${t.pitch} BETWEEN -12 AND 12`),
     check('tts_timeout_range', sql`${t.timeoutSeconds} BETWEEN 10 AND 300`),
   ],
