@@ -187,6 +187,27 @@ export const providerSettings = sqliteTable(
   ],
 );
 
+export const ttsSettings = sqliteTable(
+  'tts_settings',
+  {
+    id: integer('id').primaryKey().default(1),
+    baseUrl: text('base_url'),
+    model: text('model'),
+    encryptedApiKey: text('encrypted_api_key'),
+    voice: text('voice').notNull().default('alloy'),
+    speed: real('speed').notNull().default(1),
+    pitch: integer('pitch').notNull().default(0),
+    timeoutSeconds: integer('timeout_seconds').notNull().default(60),
+    revision: integer('revision').notNull().default(1),
+  },
+  (t) => [
+    check('tts_singleton', sql`${t.id} = 1`),
+    check('tts_speed_range', sql`${t.speed} BETWEEN 0.25 AND 4.0`),
+    check('tts_pitch_range', sql`${t.pitch} BETWEEN -12 AND 12`),
+    check('tts_timeout_range', sql`${t.timeoutSeconds} BETWEEN 10 AND 300`),
+  ],
+);
+
 export const jobs = sqliteTable(
   'jobs',
   {
