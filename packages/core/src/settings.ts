@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { getDatabase } from '@novel/db';
 import { AppError } from './errors.js';
 import { enqueueJob } from './jobs.js';
+import { listSourceDefinitions } from './source-definitions.js';
 
 export interface ProviderSettingsView {
   baseUrl: string | null; model: string | null; revision: number; timeoutSeconds: number; chunkCharacters: number; automaticPaused: boolean; hasApiKey: boolean;
@@ -101,7 +102,19 @@ interface SourceSettingsRow { source_id: string; enabled: number; request_interv
 
 export function listSourceSettings() {
   const rows = getDatabase().sqlite.prepare('SELECT source_id,enabled,request_interval_ms,next_request_at,last_error,last_checked_at FROM source_settings ORDER BY source_id').all() as SourceSettingsRow[];
-  return rows.map((value) => ({ sourceId: value.source_id, enabled: value.enabled === 1, requestIntervalMs: value.request_interval_ms, nextRequestAt: value.next_request_at, lastError: value.last_error, lastCheckedAt: value.last_checked_at }));
+  const settings = new Map(rows.map((value) => [value.source_id, value]));
+  return listSourceDefinitions().map((definition) => {
+    const value = settings.get(definition.id);
+    return {
+      ...definition,
+      sourceId: definition.id,
+      enabled: value?.enabled === 1,
+      requestIntervalMs: value?.request_interval_ms ?? 2000,
+      nextRequestAt: value?.next_request_at ?? 0,
+      lastError: value?.last_error ?? null,
+      lastCheckedAt: value?.last_checked_at ?? null,
+    };
+  });
 }
 
 export function updateSourceSettings(sourceId: string, input: { enabled?: boolean | undefined; requestIntervalMs?: number | undefined }) {
