@@ -42,6 +42,13 @@ interface Novel {
   epubReady: boolean;
   chapters: Chapter[];
 }
+interface BulkTranslationResult {
+  queued: number;
+  alreadyActive: number;
+  waitingForDownload: number;
+  totalUntranslated: number;
+  concurrency: number;
+}
 function isNovel(value: unknown): value is Novel {
   return (
     !!value &&
@@ -54,6 +61,29 @@ function isNovel(value: unknown): value is Novel {
     Array.isArray(value.chapters)
   );
 }
+function isBulkTranslationResult(value: unknown): value is BulkTranslationResult {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'queued' in value &&
+    typeof value.queued === 'number' &&
+    'alreadyActive' in value &&
+    typeof value.alreadyActive === 'number' &&
+    'waitingForDownload' in value &&
+    typeof value.waitingForDownload === 'number' &&
+    'totalUntranslated' in value &&
+    typeof value.totalUntranslated === 'number' &&
+    'concurrency' in value &&
+    typeof value.concurrency === 'number'
+  );
+}
+function apiError(value: unknown, fallback: string): string {
+  if (!value || typeof value !== 'object' || !('error' in value)) return fallback;
+  const error = value.error;
+  return error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
+    ? error.message
+    : fallback;
+}
 function chapterFilter(value: string): 'all' | 'unread' | 'downloaded' | 'translated' {
   return value === 'unread' || value === 'downloaded' || value === 'translated' ? value : 'all';
 }
@@ -65,6 +95,8 @@ export function NovelClient({ novelId }: { novelId: string }) {
   const request = useRef<AbortController | null>(null);
   const [editing, setEditing] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [bulkQueueing, setBulkQueueing] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [cover, setCover] = useState<File | null>(null);
@@ -224,6 +256,45 @@ export function NovelClient({ novelId }: { novelId: string }) {
   function translate(chapterId: string, regenerate = false) {
     return startJob(`translation:${chapterId}`, `/api/chapters/${chapterId}/translation`, { regenerate });
   }
+  async function translateAll() {
+    if (bulkQueueing) return;
+    setBulkQueueing(true);
+    setBulkMessage('');
+    setError('');
+    try {
+      const response = await fetch(`/api/novels/${novelId}/translations`, { method: 'POST' });
+      const value: unknown = await response.json().catch(() => null);
+      if (!response.ok || !isBulkTranslationResult(value)) {
+        setError(apiError(value, 'Could not queue novel translations.'));
+        return;
+      }
+      if (value.totalUntranslated === 0) {
+        setBulkMessage('Every chapter is already translated.');
+      } else if (value.queued > 0) {
+        const active = value.queued + value.alreadyActive;
+        setBulkMessage(
+          `Queued ${value.queued} chapter${value.queued === 1 ? '' : 's'} in chapter order. ` +
+            `Up to ${value.concurrency} translation${value.concurrency === 1 ? '' : 's'} will run at once` +
+            `${active > value.queued ? `; ${value.alreadyActive} were already active` : ''}.` +
+            `${value.waitingForDownload > 0 ? ` ${value.waitingForDownload} chapter${value.waitingForDownload === 1 ? ' is' : 's are'} still waiting for source download.` : ''}`,
+        );
+      } else if (value.alreadyActive > 0) {
+        setBulkMessage(
+          `All downloaded untranslated chapters are already queued or translating. Up to ${value.concurrency} run at once.` +
+            `${value.waitingForDownload > 0 ? ` ${value.waitingForDownload} chapter${value.waitingForDownload === 1 ? ' is' : 's are'} still downloading.` : ''}`,
+        );
+      } else {
+        setBulkMessage(
+          `${value.waitingForDownload} untranslated chapter${value.waitingForDownload === 1 ? ' is' : 's are'} still waiting for source download.`,
+        );
+      }
+      await load(false, true);
+    } catch {
+      setError('Could not queue novel translations.');
+    } finally {
+      setBulkQueueing(false);
+    }
+  }
   async function mark(chapter: Chapter) {
     const response = await fetch(`/api/novels/${novelId}/progress`, {
       method: 'PUT',
@@ -271,6 +342,7 @@ export function NovelClient({ novelId }: { novelId: string }) {
   const chapters = visible.slice((page - 1) * 50, page * 50);
   const continueId = novel.currentChapterId ?? novel.chapters.find((chapter) => chapter.fetched)?.id;
   const sourceUrl = novel.chapters[0]?.canonicalUrl;
+  const readyToTranslate = novel.chapters.filter((chapter) => chapter.fetched && !chapter.translated).length;
   const checkAction = jobActions['check-updates'];
   const checkActive = isJobFeedbackActive(checkAction);
   const checkLabel =
@@ -337,6 +409,15 @@ export function NovelClient({ novelId }: { novelId: string }) {
           )}
           <button
             className={`${buttonClass} disabled:cursor-not-allowed disabled:opacity-50`}
+            disabled={bulkQueueing || readyToTranslate === 0}
+            title={readyToTranslate === 0 ? 'No downloaded untranslated chapters are ready to queue.' : undefined}
+            onClick={() => void translateAll()}
+          >
+            {bulkQueueing ? <Loader2 className="animate-spin" size={16} /> : <Languages size={16} />}
+            {bulkQueueing ? 'Queueing…' : `Translate all${readyToTranslate > 0 ? ` (${readyToTranslate})` : ''}`}
+          </button>
+          <button
+            className={`${buttonClass} disabled:cursor-not-allowed disabled:opacity-50`}
             disabled={!novel.epubReady || downloading}
             aria-describedby={!novel.epubReady ? 'epub-availability' : undefined}
             onClick={() => void downloadEpub()}
@@ -384,6 +465,14 @@ export function NovelClient({ novelId }: { novelId: string }) {
           </button>
         </div>
       </section>
+      {bulkMessage && (
+        <div
+          className="mb-[18px] rounded-[10px] border border-[color-mix(in_srgb,var(--color-success)_28%,var(--color-line))] bg-[color-mix(in_srgb,var(--color-success)_8%,var(--color-card))] px-3.5 py-3 text-sm text-ink"
+          role="status"
+        >
+          {bulkMessage}
+        </div>
+      )}
       {error && (
         <div
           className="mb-[18px] rounded-[10px] border border-[color-mix(in_srgb,var(--color-danger)_35%,var(--color-line))] bg-danger-soft px-3.5 py-3 text-danger"
