@@ -170,7 +170,7 @@ export function NovelClient({ novelId }: { novelId: string }) {
     let shouldRefresh = false;
     for (const [key, action] of Object.entries(jobActions)) {
       if (
-        key.startsWith('translation:') &&
+        (key.startsWith('translation:') || key.startsWith('fetch:')) &&
         action.state === 'succeeded' &&
         action.jobId &&
         !refreshedTranslations.current.has(action.jobId)
@@ -278,6 +278,9 @@ export function NovelClient({ novelId }: { novelId: string }) {
   }
   function translate(chapterId: string, regenerate = false) {
     return startJob(`translation:${chapterId}`, `/api/chapters/${chapterId}/translation`, { regenerate });
+  }
+  function retryChapter(chapterId: string) {
+    return startJob(`fetch:${chapterId}`, `/api/chapters/${chapterId}/retry`);
   }
   async function translateAll() {
     if (bulkQueueing) return;
@@ -656,6 +659,8 @@ export function NovelClient({ novelId }: { novelId: string }) {
             chapters.map((chapter) => {
               const translationAction = jobActions[`translation:${chapter.id}`];
               const translationActive = isJobFeedbackActive(translationAction);
+              const fetchAction = jobActions[`fetch:${chapter.id}`];
+              const fetchActive = isJobFeedbackActive(fetchAction);
               const translationLabel =
                 translationAction?.state === 'submitting'
                   ? 'Queueing…'
@@ -729,13 +734,25 @@ export function NovelClient({ novelId }: { novelId: string }) {
                         className={`${buttonClass} h-9 min-h-0 px-3 disabled:cursor-not-allowed disabled:opacity-60 max-[640px]:w-9 max-[640px]:px-0`}
                         type="button"
                         aria-busy={translationActive}
-                        disabled={translationActive || translationAction?.state === 'succeeded'}
+                        disabled={translationActive || fetchActive || translationAction?.state === 'succeeded'}
                         onClick={() => void translate(chapter.id)}
                       >
                         {translationActive ? <Loader2 className="animate-spin" size={14} /> : <Languages size={14} />}
                         <span className="max-[640px]:sr-only">{translationLabel}</span>
                       </button>
                     )}
+                    <button
+                      className={`${buttonClass} h-9 min-h-0 px-3 disabled:cursor-not-allowed disabled:opacity-60 max-[640px]:w-9 max-[640px]:px-0`}
+                      type="button"
+                      aria-label={`Retry download for chapter ${chapter.ordinal}`}
+                      aria-busy={fetchActive}
+                      disabled={fetchActive}
+                      title="Fetch this chapter again from the source"
+                      onClick={() => void retryChapter(chapter.id)}
+                    >
+                      {fetchActive ? <Loader2 className="animate-spin" size={14} /> : <RefreshCw size={14} />}
+                      <span className="max-[640px]:sr-only">{fetchActive ? 'Downloading…' : 'Retry download'}</span>
+                    </button>
                     <button
                       className={`grid size-9 place-items-center rounded-lg transition-colors hover:bg-paper ${
                         chapter.readAt ? 'bg-success-soft text-success' : 'text-muted hover:text-ink'

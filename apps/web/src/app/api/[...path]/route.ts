@@ -17,6 +17,7 @@ import {
   listNovels,
   listSourceSettings,
   queueCheckUpdates,
+  queueChapterFetch,
   queueProviderCheck,
   queueSourceCheck,
   queueTranslation,
@@ -288,6 +289,8 @@ async function dispatch(request: Request, context: RouteContext): Promise<Respon
     return json(getNovel(path[1]!));
   }
   if (method === 'GET' && path[0] === 'chapters' && path.length === 2) return json(getChapter(path[1]!));
+  if (method === 'POST' && path[0] === 'chapters' && path.length === 3 && path[2] === 'retry')
+    return jobResponse(queueChapterFetch(path[1]!));
   if (method === 'POST' && path[0] === 'chapters' && path.length === 3 && path[2] === 'translation') {
     const body = await jsonBody(request, translationSchema);
     return jobResponse(queueTranslation(path[1]!, body.regenerate ?? false));

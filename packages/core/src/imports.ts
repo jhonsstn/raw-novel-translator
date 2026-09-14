@@ -155,6 +155,29 @@ export function queueCheckUpdates(novelId: string, origin: 'manual' | 'automatic
   return enqueueJob({ kind: 'check_updates', payload: { novelId }, dedupeKey: `check:${novelId}`, origin, novelId });
 }
 
+export function queueChapterFetch(chapterId: string): Job {
+  const sqlite = getDatabase().sqlite;
+  const chapter = sqlite.prepare('SELECT id,novel_id FROM chapters WHERE id=?').get(chapterId) as
+    | { id: string; novel_id: string }
+    | undefined;
+  if (!chapter) throw new AppError('CHAPTER_NOT_FOUND', 'Chapter not found', 404);
+  sqlite.transaction(() => {
+    sqlite.prepare('DELETE FROM translations WHERE chapter_id=?').run(chapterId);
+    sqlite.prepare('DELETE FROM translation_runs WHERE chapter_id=?').run(chapterId);
+    sqlite
+      .prepare('UPDATE chapters SET paragraphs=NULL,source_hash=NULL,fetched_at=NULL,updated_at=? WHERE id=?')
+      .run(Date.now(), chapterId);
+  })();
+  return enqueueJob({
+    kind: 'fetch_chapter',
+    payload: { chapterId },
+    dedupeKey: `fetch:${chapterId}`,
+    origin: 'manual',
+    novelId: chapter.novel_id,
+    chapterId,
+  });
+}
+
 function saveDiscovery(
   adapter: SourceAdapter,
   input: ImportInput,
