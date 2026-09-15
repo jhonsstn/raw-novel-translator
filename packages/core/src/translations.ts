@@ -8,6 +8,7 @@ import { getProviderCredentials, getProviderSettings } from './settings.js';
 interface ChapterTranslationRow {
   id: string;
   novel_id: string;
+  novel_title: string;
   title: string;
   paragraphs: string | null;
   source_hash: string | null;
@@ -136,7 +137,9 @@ export async function handleTranslationJob(job: Job, signal: AbortSignal): Promi
   if (!chapterId) throw new AppError('INVALID_JOB', 'Translation job has no chapter', 500);
   const sqlite = getDatabase().sqlite;
   const chapter = sqlite
-    .prepare('SELECT id,novel_id,title,paragraphs,source_hash FROM chapters WHERE id=?')
+    .prepare(
+      'SELECT c.id,c.novel_id,n.title novel_title,c.title,c.paragraphs,c.source_hash FROM chapters c JOIN novels n ON n.id=c.novel_id WHERE c.id=?',
+    )
     .get(chapterId) as ChapterTranslationRow | undefined;
   if (!chapter?.source_hash) throw new AppError('CHAPTER_NOT_DOWNLOADED', 'Chapter has not been downloaded', 409);
   const paragraphs = stringParagraphs(chapter.paragraphs);
@@ -188,6 +191,7 @@ export async function handleTranslationJob(job: Job, signal: AbortSignal): Promi
         apiKey: provider.apiKey,
         timeoutMs: provider.timeoutSeconds * 1000,
         signal,
+        novelName: chapter.novel_title,
       });
       sqlite
         .prepare(
@@ -220,6 +224,7 @@ export async function handleTranslationJob(job: Job, signal: AbortSignal): Promi
       apiKey: provider.apiKey,
       timeoutMs: provider.timeoutSeconds * 1000,
       signal,
+      novelName: chapter.novel_title,
     });
     const translatedTitle = titleResult.paragraphs.join(' ').trim();
     sqlite.transaction(() => {
