@@ -1,6 +1,6 @@
 'use client';
 import { CheckCircle2, Loader2, Play, Save, Volume2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { SelectMenu } from './select-menu';
 
 interface TtsSettings {
@@ -59,10 +59,14 @@ function isTtsCatalog(value: unknown): value is TtsCatalog {
   return Array.isArray(record.models) && Array.isArray(record.voices);
 }
 
+function voicesForLanguage(voices: TtsVoiceOption[], language: string): TtsVoiceOption[] {
+  if (language === 'all') return voices;
+  return voices.filter((voice) => voice.language === language || voice.locale === language);
+}
+
 export function TtsSettingsPanel() {
   const [settings, setSettings] = useState<TtsSettings | null>(null);
   const [catalog, setCatalog] = useState<TtsCatalog>({ models: [], voices: [] });
-  const [availableLanguages, setAvailableLanguages] = useState<string[]>([]);
   const [language, setLanguage] = useState('all');
   const [apiKey, setApiKey] = useState('');
   const [autoNext, setAutoNext] = useState(true);
@@ -78,32 +82,7 @@ export function TtsSettingsPanel() {
     const value: unknown = await response.json();
     if (response.ok && isTtsCatalog(value)) {
       setCatalog(value);
-      setAvailableLanguages(
-        Array.from(
-          new Set(
-            value.voices.flatMap((voice) =>
-              [voice.locale, voice.language].filter((item): item is string => Boolean(item)),
-            ),
-          ),
-        ).sort(),
-      );
     }
-  }
-
-  async function loadVoices(selectedLanguage: string): Promise<TtsVoiceOption[]> {
-    if (selectedLanguage === 'all') {
-      await loadCatalog();
-      return [];
-    }
-    const response = await fetch(`/api/settings/tts/catalog?language=${encodeURIComponent(selectedLanguage)}`, {
-      cache: 'no-store',
-    });
-    const value: unknown = await response.json();
-    if (response.ok && isTtsCatalog(value)) {
-      setCatalog((current) => ({ ...current, voices: value.voices }));
-      return value.voices;
-    }
-    return [];
   }
 
   useEffect(() => {
@@ -188,6 +167,19 @@ export function TtsSettingsPanel() {
     }
   }
 
+  const availableLanguages = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          catalog.voices.flatMap((voice) =>
+            [voice.locale, voice.language].filter((item): item is string => Boolean(item)),
+          ),
+        ),
+      ).sort(),
+    [catalog.voices],
+  );
+  const visibleVoices = useMemo(() => voicesForLanguage(catalog.voices, language), [catalog.voices, language]);
+
   if (!settings)
     return (
       <div className="rounded-[15px] border border-dashed border-line-strong bg-card/60 px-6 py-16 text-center text-muted">
@@ -196,7 +188,6 @@ export function TtsSettingsPanel() {
     );
 
   const configured = Boolean(settings.baseUrl && settings.model && settings.hasApiKey);
-  const visibleVoices = catalog.voices;
   const voiceOptions = visibleVoices.some((voice) => voice.id === settings.voice)
     ? visibleVoices
     : [
@@ -294,10 +285,12 @@ export function TtsSettingsPanel() {
                 ...availableLanguages.map((value) => ({ value, label: value })),
               ]}
               onChange={(selectedLanguage) => {
+                const nextVoices = voicesForLanguage(catalog.voices, selectedLanguage);
                 setLanguage(selectedLanguage);
-                void loadVoices(selectedLanguage).then((voices) => {
-                  const firstVoice = voices[0];
-                  if (firstVoice) setSettings((current) => (current ? { ...current, voice: firstVoice.id } : current));
+                setSettings((current) => {
+                  if (!current || nextVoices.some((voice) => voice.id === current.voice)) return current;
+                  const firstVoice = nextVoices[0];
+                  return firstVoice ? { ...current, voice: firstVoice.id } : current;
                 });
               }}
             />
