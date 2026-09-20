@@ -1,7 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { BookOpenText, Library, ListTodo, Menu, Moon, Settings, Sun, X } from 'lucide-react';
+import {
+  BookOpenText,
+  Library,
+  ListTodo,
+  Menu,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings,
+  Sun,
+  X,
+} from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -42,7 +53,7 @@ function ThemeButton({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function NavigationLinks({ onNavigate }: { onNavigate?: () => void }) {
+function NavigationLinks({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
   return (
     <nav
@@ -56,10 +67,11 @@ function NavigationLinks({ onNavigate }: { onNavigate?: () => void }) {
             href={href}
             key={href}
             aria-current={active ? 'page' : undefined}
+            title={compact ? label : undefined}
             {...(onNavigate ? { onClick: onNavigate } : {})}
           >
             <Icon size={17} />
-            <span>{label}</span>
+            <span className="workspace-sidebar-label">{label}</span>
           </Link>
         );
       })}
@@ -69,12 +81,25 @@ function NavigationLinks({ onNavigate }: { onNavigate?: () => void }) {
 
 export function AppNavigation() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sidebarClosed, setSidebarClosed] = useState(false);
+
+  useEffect(() => {
+    setSidebarClosed(document.documentElement.dataset.workspaceSidebar === 'closed');
+  }, []);
+
+  function toggleSidebar() {
+    const nextClosed = !sidebarClosed;
+    document.documentElement.dataset.workspaceSidebar = nextClosed ? 'closed' : 'open';
+    localStorage.setItem('workspace-sidebar', nextClosed ? 'closed' : 'open');
+    setSidebarClosed(nextClosed);
+  }
+
   const brand = (
     <>
       <span className="grid size-9 shrink-0 place-items-center rounded-[11px] bg-ink-strong text-white shadow-[inset_0_0_0_1px_rgb(255_255_255/12%)] dark:bg-[#f5f5f6] dark:text-[#111113] max-[760px]:size-[34px]">
         <BookOpenText size={19} />
       </span>
-      <span className="grid gap-0.5">
+      <span className="workspace-sidebar-label grid gap-0.5">
         <strong className="font-[750] tracking-[-.02em]">Novel</strong>
         <small className="text-[11px] font-semibold uppercase tracking-[.14em] text-muted">Library</small>
       </span>
@@ -83,25 +108,42 @@ export function AppNavigation() {
 
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-20 flex w-[248px] flex-col justify-between border-r border-line bg-sidebar px-[18px] pt-[27px] pb-5 max-[960px]:w-[218px] max-[760px]:hidden">
+      <aside
+        id="workspace-sidebar"
+        className="workspace-sidebar fixed inset-y-0 left-0 z-20 flex w-[248px] flex-col justify-between overflow-hidden border-r border-line bg-sidebar px-[18px] pt-[27px] pb-5 transition-[width,padding] duration-200 max-[960px]:w-[218px] max-[760px]:hidden"
+      >
         <div>
-          <Link
-            className="inline-flex min-w-0 items-center gap-[11px] text-[15px] leading-[1.1] text-ink-strong"
-            href="/"
-          >
-            {brand}
-          </Link>
-          <div className="mx-3 mt-[38px] mb-2.5 text-[10px] font-[750] uppercase tracking-[.16em] text-muted">
+          <div className="workspace-sidebar-header flex items-center justify-between gap-2">
+            <Link
+              className="inline-flex min-w-0 items-center gap-[11px] text-[15px] leading-[1.1] text-ink-strong"
+              href="/"
+              title={sidebarClosed ? 'Library' : undefined}
+            >
+              {brand}
+            </Link>
+            <button
+              className="grid size-9 shrink-0 place-items-center rounded-[10px] text-muted transition-colors hover:bg-sidebar-hover hover:text-ink"
+              type="button"
+              aria-label={sidebarClosed ? 'Open workspace sidebar' : 'Close workspace sidebar'}
+              aria-controls="workspace-sidebar"
+              aria-expanded={!sidebarClosed}
+              title={sidebarClosed ? 'Open workspace sidebar' : 'Close workspace sidebar'}
+              onClick={toggleSidebar}
+            >
+              {sidebarClosed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            </button>
+          </div>
+          <div className="workspace-sidebar-label mx-3 mt-[38px] mb-2.5 text-[10px] font-[750] uppercase tracking-[.16em] text-muted">
             Workspace
           </div>
-          <NavigationLinks />
+          <NavigationLinks compact={sidebarClosed} />
         </div>
         <div className="grid gap-3 border-t border-line pt-[17px]">
-          <div className="flex items-center gap-[9px] px-[9px] text-xs text-muted">
+          <div className="workspace-sidebar-status flex items-center gap-[9px] px-[9px] text-xs text-muted">
             <span className="inline-block size-[7px] shrink-0 rounded-full bg-success shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-success)_14%,transparent)]" />
             <span>Private workspace</span>
           </div>
-          <ThemeButton />
+          <ThemeButton compact={sidebarClosed} />
         </div>
       </aside>
       <header className="sticky top-0 z-30 hidden h-16 items-center justify-between border-b border-line bg-[color-mix(in_srgb,var(--color-sidebar)_90%,transparent)] px-3.5 backdrop-blur-2xl max-[760px]:flex">

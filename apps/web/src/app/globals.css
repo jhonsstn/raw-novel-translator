@@ -144,6 +144,37 @@
 }
 
 @layer utilities {
+  @media (min-width: 761px) {
+    :root[data-workspace-sidebar='closed'] .workspace-sidebar {
+      width: 72px;
+      padding-right: 14px;
+      padding-left: 14px;
+    }
+
+    :root[data-workspace-sidebar='closed'] .workspace-content {
+      margin-left: 72px;
+    }
+
+    :root[data-workspace-sidebar='closed'] .workspace-sidebar-header {
+      flex-direction: column;
+    }
+
+    :root[data-workspace-sidebar='closed'] .workspace-sidebar-label,
+    :root[data-workspace-sidebar='closed'] .workspace-sidebar-status {
+      display: none;
+    }
+
+    :root[data-workspace-sidebar='closed'] .workspace-sidebar nav {
+      margin-top: 28px;
+    }
+
+    :root[data-workspace-sidebar='closed'] .workspace-sidebar nav a {
+      justify-content: center;
+      padding-right: 0;
+      padding-left: 0;
+    }
+  }
+
   body:has(.reader-focus) > aside,
   body:has(.reader-focus) > header {
     display: none;
