@@ -1,4 +1,5 @@
 'use client';
+import Image from 'next/image';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -468,16 +469,21 @@ export function NovelClient({ novelId }: { novelId: string }) {
       <section className="mt-7 mb-8 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-8 max-[800px]:grid-cols-1 max-[800px]:gap-6">
         <div className="flex min-w-0 items-center gap-6 max-[560px]:items-start max-[560px]:gap-4">
           <div className="relative grid aspect-2/3 w-[112px] shrink-0 place-items-center overflow-hidden rounded bg-cover-art text-white shadow-novel after:pointer-events-none after:absolute after:inset-0 after:bg-cover-overlay max-[560px]:w-[84px]">
-            {novel.coverUrl && (
-              <img
+            {novel.coverUrl ? (
+              <Image
                 className="absolute inset-0 z-10 size-full bg-paper-raised object-contain"
                 src={novel.coverUrl}
-                alt=""
+                alt={`${novel.displayTitle} cover`}
+                fill
+                loading="eager"
+                sizes="(max-width: 560px) 84px, 112px"
+                unoptimized
               />
+            ) : (
+              <div className="relative z-10 w-3/4 border border-white/40 px-3 py-4 text-center font-serif text-sm leading-tight max-[560px]:text-[11px]">
+                {novel.displayTitle}
+              </div>
             )}
-            <div className="relative z-10 w-3/4 border border-white/40 px-3 py-4 text-center font-serif text-sm leading-tight max-[560px]:text-[11px]">
-              {novel.displayTitle}
-            </div>
           </div>
           <div className="min-w-0">
             <div className="mb-2 text-[11px] font-extrabold uppercase tracking-[.15em] text-accent-ink">

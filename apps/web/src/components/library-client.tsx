@@ -159,23 +159,28 @@ export function LibraryClient() {
         </div>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-[18px] max-[760px]:grid-cols-[repeat(auto-fill,minmax(165px,1fr))] max-[760px]:gap-[13px]">
-          {novels.map((novel) => (
+          {novels.map((novel, index) => (
             <Link
               className="group flex flex-col overflow-hidden rounded-[15px] border border-line bg-card text-ink shadow-card transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-[3px] hover:border-line-strong hover:shadow-novel"
               href={`/novels/${novel.id}`}
               key={novel.id}
             >
               <div className="relative grid aspect-2/3 place-items-center overflow-hidden bg-cover-art text-white after:pointer-events-none after:absolute after:inset-0 after:bg-cover-overlay">
-                {novel.coverUrl && (
+                {novel.coverUrl ? (
                   <Image
                     className="absolute inset-0 z-10 size-full bg-paper-raised object-contain"
                     src={novel.coverUrl}
-                    alt=""
+                    alt={`${novel.displayTitle} cover`}
+                    fill
+                    loading={index === 0 ? 'eager' : 'lazy'}
+                    sizes="(max-width: 760px) 50vw, 220px"
+                    unoptimized
                   />
+                ) : (
+                  <div className="relative z-10 w-3/4 border border-white/40 px-4 py-5 text-center font-serif text-xl leading-tight">
+                    {novel.displayTitle}
+                  </div>
                 )}
-                <div className="relative z-10 w-3/4 border border-white/40 px-4 py-5 text-center font-serif text-xl leading-tight">
-                  {novel.displayTitle}
-                </div>
               </div>
               <div className="flex-1 p-[17px] max-[760px]:p-3.5">
                 <h3 className="mb-[7px]">{novel.displayTitle}</h3>
