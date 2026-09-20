@@ -266,14 +266,18 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
             aria-label="Reading language"
           >
             <button
-              className={`${segmentClass} ${mode === 'en' ? 'bg-card text-ink-strong shadow-[0_1px_4px_rgb(0_0_0/10%)]' : ''}`}
+              className={`${segmentClass} ${mode === 'en' ? 'bg-accent! text-white! shadow-[0_2px_8px_color-mix(in_srgb,var(--color-accent)_28%,transparent)]' : ''}`}
+              type="button"
               disabled={!chapter.englishParagraphs}
+              aria-pressed={mode === 'en'}
               onClick={() => chooseMode('en')}
             >
               English
             </button>
             <button
-              className={`${segmentClass} ${mode === 'source' ? 'bg-card text-ink-strong shadow-[0_1px_4px_rgb(0_0_0/10%)]' : ''}`}
+              className={`${segmentClass} ${mode === 'source' ? 'bg-accent! text-white! shadow-[0_2px_8px_color-mix(in_srgb,var(--color-accent)_28%,transparent)]' : ''}`}
+              type="button"
+              aria-pressed={mode === 'source'}
               onClick={() => chooseMode('source')}
             >
               Chinese
@@ -377,14 +381,18 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
         <div className="mt-2 hidden items-center justify-between gap-2 max-[760px]:flex">
           <div className="flex rounded-[10px] border border-line bg-paper-raised p-0.5" aria-label="Reading language">
             <button
-              className={`${segmentClass} min-h-8 px-3 ${mode === 'en' ? 'bg-card text-ink-strong shadow-[0_1px_4px_rgb(0_0_0/10%)]' : ''}`}
+              className={`${segmentClass} min-h-8 px-3 ${mode === 'en' ? 'bg-accent! text-white! shadow-[0_2px_8px_color-mix(in_srgb,var(--color-accent)_28%,transparent)]' : ''}`}
+              type="button"
               disabled={!chapter.englishParagraphs}
+              aria-pressed={mode === 'en'}
               onClick={() => chooseMode('en')}
             >
               English
             </button>
             <button
-              className={`${segmentClass} min-h-8 px-3 ${mode === 'source' ? 'bg-card text-ink-strong shadow-[0_1px_4px_rgb(0_0_0/10%)]' : ''}`}
+              className={`${segmentClass} min-h-8 px-3 ${mode === 'source' ? 'bg-accent! text-white! shadow-[0_2px_8px_color-mix(in_srgb,var(--color-accent)_28%,transparent)]' : ''}`}
+              type="button"
+              aria-pressed={mode === 'source'}
               onClick={() => chooseMode('source')}
             >
               Chinese
