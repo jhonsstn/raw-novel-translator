@@ -96,6 +96,26 @@ function chapterFilter(value: string): 'all' | 'unread' | 'downloaded' | 'transl
   return value === 'unread' || value === 'downloaded' || value === 'translated' ? value : 'all';
 }
 
+const chapterPageSizes = [10, 25, 50, 100] as const;
+type PaginationItem = number | 'start-ellipsis' | 'end-ellipsis';
+
+function paginationItems(currentPage: number, pageCount: number): PaginationItem[] {
+  if (pageCount <= 7) return Array.from({ length: pageCount }, (_, index) => index + 1);
+
+  let start = Math.max(2, currentPage - 1);
+  let end = Math.min(pageCount - 1, currentPage + 1);
+  if (currentPage <= 4) end = 5;
+  if (currentPage >= pageCount - 3) start = pageCount - 4;
+
+  return [
+    1,
+    ...(start > 2 ? (['start-ellipsis'] as const) : []),
+    ...Array.from({ length: end - start + 1 }, (_, index) => start + index),
+    ...(end < pageCount - 1 ? (['end-ellipsis'] as const) : []),
+    pageCount,
+  ];
+}
+
 export function NovelClient({ novelId }: { novelId: string }) {
   const router = useRouter();
   const [novel, setNovel] = useState<Novel | null>(null);
@@ -114,6 +134,7 @@ export function NovelClient({ novelId }: { novelId: string }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'unread' | 'downloaded' | 'translated'>('all');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<(typeof chapterPageSizes)[number]>(50);
   const [author, setAuthor] = useState('');
   const { actions: jobActions, start: startJob } = useJobFeedback(`novel:${novelId}`);
   const refreshedTranslations = useRef(new Set<string>());
@@ -364,15 +385,16 @@ export function NovelClient({ novelId }: { novelId: string }) {
         {error || 'Loading novel…'}
       </div>
     );
-  const pages = Math.max(1, Math.ceil(visible.length / 50));
+  const pages = Math.max(1, Math.ceil(visible.length / pageSize));
   const currentPage = Math.min(page, pages);
-  const chapters = visible.slice((currentPage - 1) * 50, currentPage * 50);
+  const chapters = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const pageItems = paginationItems(currentPage, pages);
   const continueId = novel.currentChapterId ?? novel.chapters.find((chapter) => chapter.fetched)?.id;
   const sourceUrl = novel.chapters[0]?.canonicalUrl;
   const readyToTranslate = novel.chapters.filter((chapter) => chapter.fetched && !chapter.translated).length;
   const unreadCount = novel.chapters.filter((chapter) => chapter.readAt === null).length;
-  const resultStart = visible.length === 0 ? 0 : (currentPage - 1) * 50 + 1;
-  const resultEnd = Math.min(currentPage * 50, visible.length);
+  const resultStart = visible.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const resultEnd = Math.min(currentPage * pageSize, visible.length);
   const checkAction = jobActions['check-updates'];
   const checkActive = isJobFeedbackActive(checkAction);
   const checkLabel =
@@ -646,6 +668,19 @@ export function NovelClient({ novelId }: { novelId: string }) {
                 setPage(1);
               }}
             />
+            <SelectMenu
+              className="w-36 max-[560px]:w-full"
+              ariaLabel="Chapters per page"
+              value={String(pageSize)}
+              options={chapterPageSizes.map((size) => ({ value: String(size), label: `${size} per page` }))}
+              onChange={(value) => {
+                const size = Number(value);
+                if (chapterPageSizes.includes(size as (typeof chapterPageSizes)[number])) {
+                  setPageSize(size as (typeof chapterPageSizes)[number]);
+                  setPage(1);
+                }
+              }}
+            />
           </div>
         </header>
         <div className="border-t border-line">
@@ -771,17 +806,14 @@ export function NovelClient({ novelId }: { novelId: string }) {
             })
           )}
         </div>
-        <footer className="flex min-h-14 items-center justify-between gap-4 border-t border-line px-[22px] text-sm text-muted max-[760px]:px-[17px]">
-          <span>
+        <footer className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-t border-line px-[22px] py-3 text-sm text-muted max-[760px]:px-[17px]">
+          <span className="tabular-nums">
             Showing {resultStart}–{resultEnd} of {visible.length}
           </span>
           {pages > 1 && (
-            <div className="flex items-center gap-2">
-              <span className="mr-1 tabular-nums">
-                {currentPage} / {pages}
-              </span>
+            <nav className="flex items-center gap-1" aria-label="Chapter pages">
               <button
-                className={`${buttonClass} size-9 min-h-0 p-0`}
+                className={`${buttonClass} size-9 min-h-0 p-0 disabled:cursor-not-allowed disabled:opacity-45`}
                 type="button"
                 aria-label="Previous chapter page"
                 disabled={currentPage === 1}
@@ -789,8 +821,28 @@ export function NovelClient({ novelId }: { novelId: string }) {
               >
                 <ChevronLeft size={16} />
               </button>
+              {pageItems.map((item) =>
+                typeof item === 'number' ? (
+                  <button
+                    className={`${buttonClass} size-9 min-h-0 p-0 tabular-nums ${
+                      item === currentPage ? 'border-accent bg-accent-soft text-accent-ink shadow-none' : ''
+                    }`}
+                    key={item}
+                    type="button"
+                    aria-label={`Go to chapter page ${item}`}
+                    aria-current={item === currentPage ? 'page' : undefined}
+                    onClick={() => setPage(item)}
+                  >
+                    {item}
+                  </button>
+                ) : (
+                  <span className="grid size-7 place-items-center" key={item} aria-hidden="true">
+                    …
+                  </span>
+                ),
+              )}
               <button
-                className={`${buttonClass} size-9 min-h-0 p-0`}
+                className={`${buttonClass} size-9 min-h-0 p-0 disabled:cursor-not-allowed disabled:opacity-45`}
                 type="button"
                 aria-label="Next chapter page"
                 disabled={currentPage === pages}
@@ -798,7 +850,7 @@ export function NovelClient({ novelId }: { novelId: string }) {
               >
                 <ChevronRight size={16} />
               </button>
-            </div>
+            </nav>
           )}
         </footer>
       </section>
