@@ -95,11 +95,36 @@ function apiError(value: unknown, fallback: string): string {
 function chapterFilter(value: string): 'all' | 'unread' | 'downloaded' | 'translated' {
   return value === 'unread' || value === 'downloaded' || value === 'translated' ? value : 'all';
 }
-function chapterOrder(value: string): 'oldest' | 'newest' {
+type ChapterOrder = 'oldest' | 'newest';
+const chapterPageSizes = [10, 25, 50, 100] as const;
+type ChapterPageSize = (typeof chapterPageSizes)[number];
+interface ChapterListPreferences {
+  order: ChapterOrder;
+  pageSize: ChapterPageSize;
+}
+const defaultChapterListPreferences: ChapterListPreferences = { order: 'oldest', pageSize: 50 };
+const chapterListPreferencesKey = 'novel-library:chapter-list-preferences';
+
+function chapterOrder(value: string): ChapterOrder {
   return value === 'newest' ? 'newest' : 'oldest';
 }
-
-const chapterPageSizes = [10, 25, 50, 100] as const;
+function isChapterPageSize(value: number): value is ChapterPageSize {
+  return chapterPageSizes.includes(value as ChapterPageSize);
+}
+function storedChapterListPreferences(): ChapterListPreferences {
+  if (typeof window === 'undefined') return defaultChapterListPreferences;
+  try {
+    const stored: unknown = JSON.parse(window.localStorage.getItem(chapterListPreferencesKey) ?? 'null');
+    if (!stored || typeof stored !== 'object') return defaultChapterListPreferences;
+    const storedPageSize = 'pageSize' in stored ? Number(stored.pageSize) : NaN;
+    return {
+      order: 'order' in stored && stored.order === 'newest' ? 'newest' : 'oldest',
+      pageSize: isChapterPageSize(storedPageSize) ? storedPageSize : defaultChapterListPreferences.pageSize,
+    };
+  } catch {
+    return defaultChapterListPreferences;
+  }
+}
 type PaginationItem = number | 'start-ellipsis' | 'end-ellipsis';
 
 function paginationItems(currentPage: number, pageCount: number): PaginationItem[] {
@@ -136,9 +161,8 @@ export function NovelClient({ novelId }: { novelId: string }) {
   const [deleting, setDeleting] = useState(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'unread' | 'downloaded' | 'translated'>('all');
-  const [order, setOrder] = useState<'oldest' | 'newest'>('oldest');
+  const [{ order, pageSize }, setChapterListPreferences] = useState(storedChapterListPreferences);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<(typeof chapterPageSizes)[number]>(50);
   const [author, setAuthor] = useState('');
   const { actions: jobActions, start: startJob } = useJobFeedback(`novel:${novelId}`);
   const refreshedTranslations = useRef(new Set<string>());
@@ -177,6 +201,13 @@ export function NovelClient({ novelId }: { novelId: string }) {
       request.current = null;
     };
   }, [load]);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(chapterListPreferencesKey, JSON.stringify({ order, pageSize }));
+    } catch {
+      // Browser privacy settings can make local storage unavailable.
+    }
+  }, [order, pageSize]);
   useEffect(() => {
     function dismissActions(event: PointerEvent) {
       if (!actionsMenu.current?.contains(event.target as Node)) actionsMenu.current?.removeAttribute('open');
@@ -681,8 +712,8 @@ export function NovelClient({ novelId }: { novelId: string }) {
               options={chapterPageSizes.map((size) => ({ value: String(size), label: `${size} per page` }))}
               onChange={(value) => {
                 const size = Number(value);
-                if (chapterPageSizes.includes(size as (typeof chapterPageSizes)[number])) {
-                  setPageSize(size as (typeof chapterPageSizes)[number]);
+                if (isChapterPageSize(size)) {
+                  setChapterListPreferences((current) => ({ ...current, pageSize: size }));
                   setPage(1);
                 }
               }}
@@ -696,7 +727,7 @@ export function NovelClient({ novelId }: { novelId: string }) {
                 { value: 'newest', label: 'Newest first' },
               ]}
               onChange={(value) => {
-                setOrder(chapterOrder(value));
+                setChapterListPreferences((current) => ({ ...current, order: chapterOrder(value) }));
                 setPage(1);
               }}
             />
