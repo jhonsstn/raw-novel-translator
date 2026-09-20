@@ -1,5 +1,5 @@
 'use client';
-import { Loader2, Pause, Play, Square, Volume2 } from 'lucide-react';
+import { Loader2, Pause, Play, Settings2, Square, Volume2 } from 'lucide-react';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -233,7 +233,9 @@ export function ReaderTtsControls({ chapterId, language, paragraphs, contentRef,
     },
     [autoNext, clearHighlight, fetchAudio, hasNextChapter, highlight, onAutoNext, paragraphs],
   );
-  playSegmentRef.current = playSegment;
+  useEffect(() => {
+    playSegmentRef.current = playSegment;
+  }, [playSegment]);
 
   const startStream = useCallback(
     async (startIndex: number) => {
@@ -415,28 +417,34 @@ export function ReaderTtsControls({ chapterId, language, paragraphs, contentRef,
     await startStream(firstVisibleParagraph());
   }
 
+  function toggleAutoNext() {
+    const next = !autoNext;
+    setAutoNext(next);
+    localStorage.setItem('reader-tts-auto-next', String(next));
+  }
+
   const label =
     state === 'loading' ? 'Generating…' : state === 'playing' ? 'Pause' : state === 'paused' ? 'Resume' : 'Read aloud';
   const progress =
     paragraphIndex === null || !paragraphs?.length ? null : `${paragraphIndex + 1} / ${paragraphs.length}`;
   return (
-    <div className="mx-auto mb-4 w-[min(780px,100%)] rounded-[14px] border border-line bg-card px-3.5 py-3 shadow-card">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="mx-auto mb-4 w-[min(780px,100%)] rounded-[14px] border border-line bg-card px-3.5 py-3 shadow-card max-[760px]:mb-3 max-[760px]:px-2.5 max-[760px]:py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 max-[760px]:flex-nowrap max-[760px]:gap-2">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-[color-mix(in_srgb,var(--color-accent)_11%,var(--color-card))] text-accent-ink">
+          <div className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-[color-mix(in_srgb,var(--color-accent)_11%,var(--color-card))] text-accent-ink max-[760px]:size-8">
             <Volume2 size={17} />
           </div>
           <div className="min-w-0">
             <div className="text-sm font-bold">Narration</div>
-            <div className="truncate text-xs text-muted">
+            <div className="truncate text-xs text-muted max-[760px]:hidden">
               {progress
                 ? `Paragraph ${progress} · ${language === 'en' ? 'English' : 'Chinese'}`
                 : 'Starts from the first visible paragraph'}
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="mr-1 flex items-center gap-2 text-xs text-muted">
+        <div className="flex flex-wrap items-center gap-2 max-[760px]:flex-nowrap max-[760px]:gap-1.5">
+          <div className="mr-1 flex items-center gap-2 text-xs text-muted max-[760px]:hidden">
             <span>Auto next</span>
             <button
               className={`${switchClass} ${autoNext ? 'bg-success after:translate-x-5' : ''}`}
@@ -444,11 +452,7 @@ export function ReaderTtsControls({ chapterId, language, paragraphs, contentRef,
               role="switch"
               aria-checked={autoNext}
               aria-label="Automatically continue to the next chapter"
-              onClick={() => {
-                const next = !autoNext;
-                setAutoNext(next);
-                localStorage.setItem('reader-tts-auto-next', String(next));
-              }}
+              onClick={toggleAutoNext}
             />
           </div>
           <button
@@ -465,9 +469,38 @@ export function ReaderTtsControls({ chapterId, language, paragraphs, contentRef,
             )}
             {label}
           </button>
-          <button className={buttonClass} disabled={state === 'idle'} onClick={stop} aria-label="Stop narration">
+          <button
+            className={`${buttonClass} ${state === 'idle' ? 'max-[760px]:hidden' : ''}`}
+            disabled={state === 'idle'}
+            onClick={stop}
+            aria-label="Stop narration"
+          >
             <Square size={15} />
           </button>
+          <details className="group relative hidden max-[760px]:block">
+            <summary
+              className={`${buttonClass} size-10 min-h-0 list-none p-0! [&::-webkit-details-marker]:hidden`}
+              aria-label="Narration settings"
+            >
+              <Settings2 size={17} />
+            </summary>
+            <div className="absolute top-[calc(100%+8px)] right-0 z-20 w-56 rounded-xl border border-line bg-card p-3 shadow-float">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <strong className="text-sm">Auto next</strong>
+                  <p className="mt-0.5 text-xs text-muted">Continue into the next chapter.</p>
+                </div>
+                <button
+                  className={`${switchClass} ${autoNext ? 'bg-success after:translate-x-5' : ''}`}
+                  type="button"
+                  role="switch"
+                  aria-checked={autoNext}
+                  aria-label="Automatically continue to the next chapter"
+                  onClick={toggleAutoNext}
+                />
+              </div>
+            </div>
+          </details>
         </div>
       </div>
       {configured === false && (

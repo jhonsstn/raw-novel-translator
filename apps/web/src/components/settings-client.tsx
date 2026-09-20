@@ -130,11 +130,6 @@ const readerLineHeightOptions = [
   { value: '1.85', label: 'Comfortable' },
   { value: '2.05', label: 'Spacious' },
 ] as const;
-const readerThemeOptions = [
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-] as const;
-
 export function SettingsClient({ tab }: { tab: Tab }) {
   const [provider, setProvider] = useState<Provider | null>(null);
   const [sources, setSources] = useState<Source[]>([]);
@@ -146,7 +141,6 @@ export function SettingsClient({ tab }: { tab: Tab }) {
   const [error, setError] = useState('');
   const [fontSize, setFontSize] = useState(20);
   const [lineHeight, setLineHeight] = useState(1.85);
-  const [theme, setTheme] = useState('light');
   const [sourceDraft, setSourceDraft] = useState<SourceDraft | null>(null);
   const [savingSource, setSavingSource] = useState(false);
   const { actions: jobActions, start: startJob } = useJobFeedback('settings');
@@ -176,7 +170,6 @@ export function SettingsClient({ tab }: { tab: Tab }) {
     void load();
     setFontSize(Number(localStorage.getItem('reader-font-size')) || 20);
     setLineHeight(Number(localStorage.getItem('reader-line-height')) || 1.85);
-    setTheme(localStorage.getItem('reader-theme') ?? 'light');
   }, [load]);
   useEffect(() => {
     let shouldRefresh = false;
@@ -303,7 +296,6 @@ export function SettingsClient({ tab }: { tab: Tab }) {
   function saveReader() {
     localStorage.setItem('reader-font-size', String(fontSize));
     localStorage.setItem('reader-line-height', String(lineHeight));
-    localStorage.setItem('reader-theme', theme);
     setMessage('Reader defaults saved in this browser.');
   }
   function setDraft(key: keyof SourceDraft, value: string) {
@@ -832,10 +824,6 @@ export function SettingsClient({ tab }: { tab: Tab }) {
                 options={readerLineHeightOptions}
                 onChange={(value) => setLineHeight(Number(value))}
               />
-            </div>
-            <div className={fieldClass}>
-              <span>Theme</span>
-              <SelectMenu ariaLabel="Reader theme" value={theme} options={readerThemeOptions} onChange={setTheme} />
             </div>
           </div>
           <button className={`${primaryButtonClass} w-fit`} onClick={saveReader}>

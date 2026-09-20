@@ -1,5 +1,5 @@
 'use client';
-import { ArrowLeft, ArrowRight, Check, Languages, List, Moon, Sun } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Languages, List, Settings2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ReaderTtsControls } from './reader-tts-controls';
@@ -59,9 +59,9 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
   const [mode, setMode] = useState<Mode>('en');
   const [fontSize, setFontSize] = useState(20);
   const [lineHeight, setLineHeight] = useState(1.85);
-  const [dark, setDark] = useState(false);
   const [focus, setFocus] = useState(false);
   const contentRef = useRef<HTMLElement>(null);
+  const readerMenu = useRef<HTMLDetailsElement>(null);
   const timer = useRef<number | null>(null);
   const restored = useRef('');
   const load = useCallback(async () => {
@@ -90,11 +90,24 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
     );
     setFontSize(Number(localStorage.getItem('reader-font-size')) || 20);
     setLineHeight(Number(localStorage.getItem('reader-line-height')) || 1.85);
-    setDark(localStorage.getItem('reader-theme') === 'dark');
   }, [chapterId]);
   useEffect(() => {
     void load();
   }, [load]);
+  useEffect(() => {
+    function dismissReaderMenu(event: PointerEvent) {
+      if (!readerMenu.current?.contains(event.target as Node)) readerMenu.current?.removeAttribute('open');
+    }
+    function dismissReaderMenuWithKeyboard(event: KeyboardEvent) {
+      if (event.key === 'Escape') readerMenu.current?.removeAttribute('open');
+    }
+    document.addEventListener('pointerdown', dismissReaderMenu);
+    document.addEventListener('keydown', dismissReaderMenuWithKeyboard);
+    return () => {
+      document.removeEventListener('pointerdown', dismissReaderMenu);
+      document.removeEventListener('keydown', dismissReaderMenuWithKeyboard);
+    };
+  }, []);
   const save = useCallback(
     async (targetChapterId: string, targetMode: Mode, scrollRatio: number, completed?: boolean) => {
       if (!novel) return;
@@ -145,6 +158,16 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
   }
   function persistPreference(key: string, value: string) {
     localStorage.setItem(key, value);
+  }
+  function adjustFontSize(amount: number) {
+    const value = Math.min(28, Math.max(16, fontSize + amount));
+    setFontSize(value);
+    persistPreference('reader-font-size', String(value));
+  }
+  function toggleLineHeight() {
+    const value = lineHeight === 1.85 ? 2.05 : 1.85;
+    setLineHeight(value);
+    persistPreference('reader-line-height', String(value));
   }
   async function translate() {
     if (!chapter) return;
@@ -201,7 +224,7 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
           focus ? 'top-0 max-[760px]:mt-0' : 'top-0 max-[760px]:top-16'
         }`}
       >
-        <div className="flex flex-wrap items-center justify-between gap-2.5 max-[760px]:justify-center">
+        <div className="flex flex-wrap items-center justify-between gap-2.5 max-[760px]:hidden">
           <button className={buttonClass} onClick={() => void goContents()}>
             <List size={16} /> Contents
           </button>
@@ -224,7 +247,7 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
             )}
           </div>
         </div>
-        <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2.5 max-[760px]:w-full">
+        <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2.5 max-[760px]:hidden">
           <div
             className="flex max-w-full overflow-x-auto rounded-[11px] border border-line bg-paper-raised p-[3px]"
             aria-label="Reading language"
@@ -246,52 +269,132 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
           <button className={buttonClass} onClick={() => void toggleRead()}>
             <Check size={15} /> {chapter.readAt ? 'Mark unread' : 'Mark read'}
           </button>
-          <button
-            className={buttonClass}
-            onClick={() => {
-              const value = Math.max(16, fontSize - 1);
-              setFontSize(value);
-              persistPreference('reader-font-size', String(value));
-            }}
-            aria-label="Decrease font size"
-          >
+          <button className={buttonClass} onClick={() => adjustFontSize(-1)} aria-label="Decrease font size">
             A−
           </button>
-          <button
-            className={buttonClass}
-            onClick={() => {
-              const value = Math.min(28, fontSize + 1);
-              setFontSize(value);
-              persistPreference('reader-font-size', String(value));
-            }}
-            aria-label="Increase font size"
-          >
+          <button className={buttonClass} onClick={() => adjustFontSize(1)} aria-label="Increase font size">
             A+
           </button>
-          <button
-            className={buttonClass}
-            onClick={() => {
-              const value = lineHeight === 1.85 ? 2.05 : 1.85;
-              setLineHeight(value);
-              persistPreference('reader-line-height', String(value));
-            }}
-            aria-label="Toggle line spacing"
-          >
+          <button className={buttonClass} onClick={toggleLineHeight} aria-label="Toggle line spacing">
             ↕
-          </button>
-          <button
-            className={buttonClass}
-            onClick={() => {
-              setDark(!dark);
-              persistPreference('reader-theme', !dark ? 'dark' : 'light');
-            }}
-            aria-label="Toggle theme"
-          >
-            {dark ? <Sun size={15} /> : <Moon size={15} />}
           </button>
           <button className={buttonClass} onClick={() => setFocus(!focus)}>
             Focus
           </button>
+        </div>
+        <div className="hidden grid-cols-[40px_minmax(0,1fr)_40px] items-center gap-2 max-[760px]:grid">
+          <button
+            className={`${buttonClass} size-10 min-h-0 p-0!`}
+            aria-label="Open chapter contents"
+            onClick={() => void goContents()}
+          >
+            <List size={18} />
+          </button>
+          <div className="min-w-0 text-center">
+            <strong className="block truncate text-sm">{chapter.title}</strong>
+            <span className="block text-[9px] uppercase tracking-[.13em] text-muted">
+              Chapter {index + 1} of {novel.chapters.length}
+            </span>
+          </div>
+          <details className="group relative" ref={readerMenu}>
+            <summary
+              className={`${buttonClass} size-10 min-h-0 list-none p-0! [&::-webkit-details-marker]:hidden`}
+              aria-label="Reader settings"
+            >
+              <Settings2 size={18} />
+            </summary>
+            <div className="absolute top-[calc(100%+8px)] right-0 z-30 w-[min(280px,calc(100vw-28px))] rounded-xl border border-line bg-card p-2.5 text-left shadow-float">
+              <div className="px-2 pb-2 text-[10px] font-bold uppercase tracking-[.13em] text-muted">
+                Reader settings
+              </div>
+              <button
+                className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2.5 text-sm font-semibold hover:bg-card-hover"
+                type="button"
+                onClick={() => void toggleRead()}
+              >
+                <Check size={16} /> {chapter.readAt ? 'Mark as unread' : 'Mark as read'}
+              </button>
+              <div className="my-1.5 border-t border-line" />
+              <div className="flex items-center justify-between gap-3 px-2.5 py-1.5">
+                <span className="text-sm font-semibold">Text size</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    className={`${buttonClass} size-9 min-h-0 p-0!`}
+                    type="button"
+                    aria-label="Decrease font size"
+                    onClick={() => adjustFontSize(-1)}
+                  >
+                    A−
+                  </button>
+                  <span className="w-11 text-center text-xs tabular-nums text-muted">{fontSize}px</span>
+                  <button
+                    className={`${buttonClass} size-9 min-h-0 p-0!`}
+                    type="button"
+                    aria-label="Increase font size"
+                    onClick={() => adjustFontSize(1)}
+                  >
+                    A+
+                  </button>
+                </div>
+              </div>
+              <button
+                className="flex min-h-10 w-full items-center justify-between gap-3 rounded-lg px-2.5 text-sm font-semibold hover:bg-card-hover"
+                type="button"
+                onClick={toggleLineHeight}
+              >
+                <span>Line spacing</span>
+                <span className="text-xs font-normal text-muted">
+                  {lineHeight === 1.85 ? 'Comfortable' : 'Relaxed'}
+                </span>
+              </button>
+              <button
+                className="flex min-h-10 w-full items-center justify-between gap-3 rounded-lg px-2.5 text-sm font-semibold hover:bg-card-hover"
+                type="button"
+                onClick={() => {
+                  readerMenu.current?.removeAttribute('open');
+                  setFocus(!focus);
+                }}
+              >
+                <span>{focus ? 'Exit focus mode' : 'Enter focus mode'}</span>
+                <span className="text-xs font-normal text-muted">Distraction free</span>
+              </button>
+            </div>
+          </details>
+        </div>
+        <div className="mt-2 hidden items-center justify-between gap-2 max-[760px]:flex">
+          <div className="flex rounded-[10px] border border-line bg-paper-raised p-0.5" aria-label="Reading language">
+            <button
+              className={`${segmentClass} min-h-8 px-3 ${mode === 'en' ? 'bg-card text-ink-strong shadow-[0_1px_4px_rgb(0_0_0/10%)]' : ''}`}
+              disabled={!chapter.englishParagraphs}
+              onClick={() => chooseMode('en')}
+            >
+              English
+            </button>
+            <button
+              className={`${segmentClass} min-h-8 px-3 ${mode === 'source' ? 'bg-card text-ink-strong shadow-[0_1px_4px_rgb(0_0_0/10%)]' : ''}`}
+              onClick={() => chooseMode('source')}
+            >
+              Chinese
+            </button>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              className={`${buttonClass} size-9 min-h-0 p-0!`}
+              disabled={!previous}
+              aria-label="Previous chapter"
+              onClick={() => previous && void go(previous)}
+            >
+              <ArrowLeft size={17} />
+            </button>
+            <button
+              className={`${primaryButtonClass} size-9 min-h-0 p-0!`}
+              disabled={!next}
+              aria-label="Next chapter"
+              onClick={() => next && void go(next, true)}
+            >
+              <ArrowRight size={17} />
+            </button>
+          </div>
         </div>
       </div>
       {error && (
@@ -310,14 +413,12 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
         }}
       />
       <article
-        className={`mx-auto h-[calc(100vh_-_260px)] min-h-[360px] w-[min(780px,100%)] overflow-auto rounded-[15px] border border-line p-[clamp(26px,5vw,60px)] font-serif shadow-card max-[760px]:h-[calc(100vh_-_350px)] max-[760px]:min-h-80 max-[760px]:px-[19px] max-[760px]:py-[26px] [&_p]:mb-[1.25em] ${
-          dark ? 'bg-[#171719] text-[#ededf0]' : 'bg-white text-[#222226]'
-        }`}
+        className="mx-auto h-[calc(100vh_-_260px)] min-h-[360px] w-[min(780px,100%)] overflow-auto rounded-[15px] border border-line bg-reader-paper p-[clamp(26px,5vw,60px)] font-serif text-reader shadow-card max-[760px]:h-[calc(100dvh_-_280px)] max-[760px]:min-h-80 max-[760px]:px-[19px] max-[760px]:py-[26px] [&_p]:mb-[1.25em]"
         ref={contentRef}
         onScroll={scheduleSave}
         style={{ fontSize, lineHeight }}
       >
-        <div className={`mb-7 text-[10px] uppercase tracking-[.13em] ${dark ? 'text-[#96969f]' : 'text-muted'}`}>
+        <div className="mb-7 text-[10px] uppercase tracking-[.13em] text-muted">
           {mode === 'en' ? `English${chapter.translatedModel ? ` · ${chapter.translatedModel}` : ''}` : 'Chinese原文'}
         </div>
         {paragraphs?.map((paragraph, paragraphIndex) => <p key={paragraphIndex}>{paragraph}</p>) ??
@@ -336,10 +437,10 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
         <button className={buttonClass} disabled={!previous} onClick={() => previous && void go(previous)}>
           <ArrowLeft size={16} /> Previous
         </button>
-        <button className={buttonClass} onClick={() => void goContents()}>
+        <button className={`${buttonClass} max-[760px]:hidden`} onClick={() => void goContents()}>
           <List size={16} /> Contents
         </button>
-        <button className={buttonClass} onClick={() => void toggleRead()}>
+        <button className={`${buttonClass} max-[760px]:hidden`} onClick={() => void toggleRead()}>
           <Check size={16} /> {chapter.readAt ? 'Mark unread' : 'Mark read'}
         </button>
         <button className={primaryButtonClass} disabled={!next} onClick={() => next && void go(next, true)}>
