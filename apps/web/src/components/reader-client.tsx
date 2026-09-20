@@ -9,6 +9,8 @@ interface Chapter {
   novelId: string;
   ordinal: number;
   title: string;
+  sourceTitle: string;
+  englishTitle: string | null;
   sourceParagraphs: string[] | null;
   englishParagraphs: string[] | null;
   translatedModel: string | null;
@@ -49,6 +51,14 @@ function errorMessage(value: unknown, fallback: string): string {
   if (!error || typeof error !== 'object' || !('message' in error) || typeof error.message !== 'string')
     return fallback;
   return error.message;
+}
+
+function chapterHeading(mode: Mode, ordinal: number, title: string): string {
+  const includesNumber = title.includes(String(ordinal));
+  const includesLocalizedChapterNumber = mode === 'source' && /^第.+章/.test(title);
+  const includesEnglishChapterNumber = mode === 'en' && /^chapter\b/i.test(title);
+  if (includesNumber || includesLocalizedChapterNumber || includesEnglishChapterNumber) return title;
+  return mode === 'en' ? `Chapter ${ordinal}. ${title}` : `第 ${ordinal} 章。${title}`;
 }
 
 export function ReaderClient({ chapterId }: { chapterId: string }) {
@@ -211,6 +221,9 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
   const previous = novel.chapters[index - 1];
   const next = novel.chapters[index + 1];
   const paragraphs = mode === 'en' ? chapter.englishParagraphs : chapter.sourceParagraphs;
+  const activeTitle = mode === 'en' ? (chapter.englishTitle ?? chapter.title) : chapter.sourceTitle;
+  const activeHeading = chapterHeading(mode, chapter.ordinal, activeTitle);
+  const narrationParagraphs = paragraphs ? [activeHeading, ...paragraphs] : null;
   const buttonClass =
     'inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] border border-line bg-card px-3.5 text-[13px] font-bold text-ink transition-[transform,border-color,background-color,box-shadow] duration-150 enabled:hover:-translate-y-px enabled:hover:border-line-strong enabled:hover:bg-card-hover enabled:hover:shadow-button';
   const primaryButtonClass =
@@ -229,7 +242,7 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
             <List size={16} /> Contents
           </button>
           <div className="grid text-center max-[760px]:order-first max-[760px]:w-full">
-            <strong>{chapter.title}</strong>
+            <strong>{activeTitle}</strong>
             <span className="text-[10px] uppercase tracking-[.13em] text-muted">
               Chapter {index + 1} of {novel.chapters.length}
             </span>
@@ -291,7 +304,7 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
             <List size={18} />
           </button>
           <div className="min-w-0 text-center">
-            <strong className="block truncate text-sm">{chapter.title}</strong>
+            <strong className="block truncate text-sm">{activeTitle}</strong>
             <span className="block text-[9px] uppercase tracking-[.13em] text-muted">
               Chapter {index + 1} of {novel.chapters.length}
             </span>
@@ -405,7 +418,7 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
       <ReaderTtsControls
         chapterId={chapter.id}
         language={mode}
-        paragraphs={paragraphs}
+        paragraphs={narrationParagraphs}
         contentRef={contentRef}
         hasNextChapter={Boolean(next)}
         onAutoNext={async () => {
@@ -421,17 +434,23 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
         <div className="mb-7 text-[10px] uppercase tracking-[.13em] text-muted">
           {mode === 'en' ? `English${chapter.translatedModel ? ` · ${chapter.translatedModel}` : ''}` : 'Chinese原文'}
         </div>
-        {paragraphs?.map((paragraph, paragraphIndex) => <p key={paragraphIndex}>{paragraph}</p>) ??
-          (mode === 'en' && chapter.sourceParagraphs ? (
-            <div className="rounded-[15px] border border-dashed border-line-strong bg-card/60 px-6 py-16 text-center text-muted">
-              <p>No English translation yet.</p>
-              <button className={primaryButtonClass} onClick={() => void translate()}>
-                <Languages size={16} /> Translate chapter
-              </button>
-            </div>
-          ) : (
-            <p className="text-muted">This chapter is still downloading.</p>
-          ))}
+        {paragraphs ? (
+          <>
+            <p className="mb-8! text-[1.08em] font-bold leading-snug text-ink-strong">{activeHeading}</p>
+            {paragraphs.map((paragraph, paragraphIndex) => (
+              <p key={paragraphIndex}>{paragraph}</p>
+            ))}
+          </>
+        ) : mode === 'en' && chapter.sourceParagraphs ? (
+          <div className="rounded-[15px] border border-dashed border-line-strong bg-card/60 px-6 py-16 text-center text-muted">
+            <p>No English translation yet.</p>
+            <button className={primaryButtonClass} onClick={() => void translate()}>
+              <Languages size={16} /> Translate chapter
+            </button>
+          </div>
+        ) : (
+          <p className="text-muted">This chapter is still downloading.</p>
+        )}
       </article>
       <div className="mx-auto mt-5 flex w-[min(780px,100%)] flex-wrap items-center justify-between gap-2.5 max-[760px]:grid max-[760px]:grid-cols-2">
         <button className={buttonClass} disabled={!previous} onClick={() => previous && void go(previous)}>

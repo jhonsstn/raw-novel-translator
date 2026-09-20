@@ -25,6 +25,8 @@ interface ChapterListRow {
   novel_id: string;
   ordinal: number;
   title: string;
+  source_title?: string;
+  translated_title?: string | null;
   paragraphs: string | null;
   translated_paragraphs: string | null;
   translated_model: string | null;
@@ -176,7 +178,7 @@ export function getNovelEpubData(novelId: string): {
 export function getChapter(chapterId: string) {
   const row = getDatabase()
     .sqlite.prepare(
-      `SELECT c.id,c.novel_id,c.ordinal,COALESCE(t.translated_title,c.title) title,c.paragraphs,c.read_at,c.canonical_url,c.source_hash,t.paragraphs translated_paragraphs,t.model translated_model
+      `SELECT c.id,c.novel_id,c.ordinal,COALESCE(t.translated_title,c.title) title,c.title source_title,t.translated_title,c.paragraphs,c.read_at,c.canonical_url,c.source_hash,t.paragraphs translated_paragraphs,t.model translated_model
     FROM chapters c LEFT JOIN translations t ON t.chapter_id=c.id WHERE c.id=?`,
     )
     .get(chapterId) as ChapterListRow | undefined;
@@ -186,6 +188,8 @@ export function getChapter(chapterId: string) {
     novelId: row.novel_id,
     ordinal: row.ordinal,
     title: row.title,
+    sourceTitle: row.source_title ?? row.title,
+    englishTitle: row.translated_title ?? null,
     sourceParagraphs: decodeParagraphs(row.paragraphs),
     englishParagraphs: decodeParagraphs(row.translated_paragraphs),
     translatedModel: row.translated_model,

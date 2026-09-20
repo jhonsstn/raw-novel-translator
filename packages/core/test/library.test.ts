@@ -32,7 +32,23 @@ describe('reading progress', () => {
         )
         .run(id, id, `https://www.piaotia.com/html/1/1/${ordinal + 1}.html`, ordinal, now, now);
     }
+    sqlite
+      .prepare(
+        `INSERT INTO translations(chapter_id,target,translated_title,paragraphs,source_hash,model,base_url,prompt_version,completed_at)
+        VALUES ('chapter-1','en','Translated chapter','["Translated paragraph"]','hash','model','https://example.com',1,?)`,
+      )
+      .run(now);
     try {
+      expect(library.getChapter('chapter-1')).toMatchObject({
+        title: 'Translated chapter',
+        sourceTitle: 'Chapter',
+        englishTitle: 'Translated chapter',
+      });
+      expect(library.getChapter('chapter-2')).toMatchObject({
+        title: 'Chapter',
+        sourceTitle: 'Chapter',
+        englishTitle: null,
+      });
       library.updateReadingProgress({ novelId: 'novel', chapterId: 'chapter-1', mode: 'source', scrollRatio: 0.4 });
       library.updateReadingProgress({ novelId: 'novel', chapterId: 'chapter-1', mode: 'en', scrollRatio: 0.7 });
       expect(library.getNovel('novel').progress).toMatchObject({
