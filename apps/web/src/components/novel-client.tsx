@@ -95,6 +95,9 @@ function apiError(value: unknown, fallback: string): string {
 function chapterFilter(value: string): 'all' | 'unread' | 'downloaded' | 'translated' {
   return value === 'unread' || value === 'downloaded' || value === 'translated' ? value : 'all';
 }
+function chapterOrder(value: string): 'oldest' | 'newest' {
+  return value === 'newest' ? 'newest' : 'oldest';
+}
 
 const chapterPageSizes = [10, 25, 50, 100] as const;
 type PaginationItem = number | 'start-ellipsis' | 'end-ellipsis';
@@ -133,6 +136,7 @@ export function NovelClient({ novelId }: { novelId: string }) {
   const [deleting, setDeleting] = useState(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'unread' | 'downloaded' | 'translated'>('all');
+  const [order, setOrder] = useState<'oldest' | 'newest'>('oldest');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<(typeof chapterPageSizes)[number]>(50);
   const [author, setAuthor] = useState('');
@@ -370,15 +374,17 @@ export function NovelClient({ novelId }: { novelId: string }) {
   const visible = useMemo(() => {
     if (!novel) return [];
     const normalized = query.trim().toLocaleLowerCase();
-    return novel.chapters.filter(
-      (chapter) =>
-        (!normalized || chapter.title.toLocaleLowerCase().includes(normalized)) &&
-        (filter === 'all' ||
-          (filter === 'unread' && chapter.readAt === null) ||
-          (filter === 'downloaded' && chapter.fetched) ||
-          (filter === 'translated' && chapter.translated)),
-    );
-  }, [novel, query, filter]);
+    return novel.chapters
+      .filter(
+        (chapter) =>
+          (!normalized || chapter.title.toLocaleLowerCase().includes(normalized)) &&
+          (filter === 'all' ||
+            (filter === 'unread' && chapter.readAt === null) ||
+            (filter === 'downloaded' && chapter.fetched) ||
+            (filter === 'translated' && chapter.translated)),
+      )
+      .sort((first, second) => (order === 'oldest' ? first.ordinal - second.ordinal : second.ordinal - first.ordinal));
+  }, [novel, query, filter, order]);
   if (!novel)
     return (
       <div className="rounded-[15px] border border-dashed border-line-strong bg-card/60 px-6 py-16 text-center text-muted">
@@ -679,6 +685,19 @@ export function NovelClient({ novelId }: { novelId: string }) {
                   setPageSize(size as (typeof chapterPageSizes)[number]);
                   setPage(1);
                 }
+              }}
+            />
+            <SelectMenu
+              className="w-40 max-[560px]:w-full"
+              ariaLabel="Chapter order"
+              value={order}
+              options={[
+                { value: 'oldest', label: 'Oldest first' },
+                { value: 'newest', label: 'Newest first' },
+              ]}
+              onChange={(value) => {
+                setOrder(chapterOrder(value));
+                setPage(1);
               }}
             />
           </div>
