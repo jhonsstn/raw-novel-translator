@@ -813,18 +813,18 @@ export function NovelClient({ novelId }: { novelId: string }) {
           {pages > 1 && (
             <nav className="flex items-center gap-1" aria-label="Chapter pages">
               <button
-                className={`${buttonClass} size-9 min-h-0 p-0 disabled:cursor-not-allowed disabled:opacity-45`}
+                className={`${buttonClass} size-9 min-h-0 p-0! disabled:cursor-not-allowed disabled:opacity-45`}
                 type="button"
                 aria-label="Previous chapter page"
                 disabled={currentPage === 1}
                 onClick={() => setPage(currentPage - 1)}
               >
-                <ChevronLeft size={16} />
+                <ChevronLeft size={20} strokeWidth={2.5} />
               </button>
               {pageItems.map((item) =>
                 typeof item === 'number' ? (
                   <button
-                    className={`${buttonClass} size-9 min-h-0 p-0 tabular-nums ${
+                    className={`${buttonClass} size-9 min-h-0 p-0! tabular-nums ${
                       item === currentPage ? 'border-accent bg-accent-soft text-accent-ink shadow-none' : ''
                     }`}
                     key={item}
@@ -842,13 +842,13 @@ export function NovelClient({ novelId }: { novelId: string }) {
                 ),
               )}
               <button
-                className={`${buttonClass} size-9 min-h-0 p-0 disabled:cursor-not-allowed disabled:opacity-45`}
+                className={`${buttonClass} size-9 min-h-0 p-0! disabled:cursor-not-allowed disabled:opacity-45`}
                 type="button"
                 aria-label="Next chapter page"
                 disabled={currentPage === pages}
                 onClick={() => setPage(currentPage + 1)}
               >
-                <ChevronRight size={16} />
+                <ChevronRight size={20} strokeWidth={2.5} />
               </button>
             </nav>
           )}
