@@ -2,8 +2,15 @@ import { describe, expect, it } from 'vitest';
 import iconv = require('iconv-lite');
 import { decodeSourceBytes } from '../src/http.js';
 import { parseChapter, parseDirectory, piaotia } from '../src/piaotia.js';
+import { listSourceAdapters, sourceById, sourceForUrl } from '../src/registry.js';
 
 describe('Piaotia adapter', () => {
+  it('is registered as a code-owned source adapter', () => {
+    expect(listSourceAdapters()).toEqual([piaotia]);
+    expect(sourceById('piaotia')).toBe(piaotia);
+    expect(sourceForUrl(new URL('https://www.piaotia.com/html/1/2/3.html'))).toBe(piaotia);
+  });
+
   it('accepts only canonical chapter URLs', () => {
     expect(piaotia.matches(new URL('https://www.piaotia.com/html/1/2/3.html'))).toBe(true);
     expect(piaotia.matches(new URL('http://www.piaotia.com/html/1/2/3.html'))).toBe(false);

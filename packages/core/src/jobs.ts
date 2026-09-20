@@ -162,6 +162,38 @@ export function claimJob(lane: 'source' | 'translation', now: number): Job | nul
   })();
 }
 
+export function claimSourceJob(now: number, sourceIds: readonly string[]): Job | null {
+  if (sourceIds.length === 0) return null;
+  const sqlite = getDatabase().sqlite;
+  return sqlite.transaction(() => {
+    const kinds = laneKinds.source;
+    const kindPlaceholders = kinds.map(() => '?').join(',');
+    sqlite
+      .prepare(
+        `UPDATE jobs SET status='queued', lease_token=NULL, lease_expires_at=NULL, updated_at=? WHERE status='running' AND lease_expires_at < ? AND kind IN (${kindPlaceholders})`,
+      )
+      .run(now, now, ...kinds);
+    const sourcePlaceholders = sourceIds.map(() => '?').join(',');
+    const row = sqlite
+      .prepare(
+        `SELECT * FROM jobs WHERE status='queued' AND run_after <= ? AND kind IN (${kindPlaceholders}) AND json_extract(payload,'$.sourceId') IN (${sourcePlaceholders}) ORDER BY run_after,created_at,id LIMIT 1`,
+      )
+      .get(now, ...kinds, ...sourceIds);
+    if (!row) return null;
+    const candidate = hydrate(row as JobRow);
+    const token = randomUUID();
+    const changed = sqlite
+      .prepare(
+        "UPDATE jobs SET status='running', attempt=attempt+1, lease_token=?, lease_expires_at=?, updated_at=? WHERE id=? AND status='queued'",
+      )
+      .run(token, now + 90_000, now, candidate.id);
+    if (changed.changes !== 1) return null;
+    const sourceId = candidate.payload.sourceId;
+    if (typeof sourceId === 'string') recordJobEvent(candidate.id, token, 'Source selected', `Source: ${sourceId}`);
+    return getJob(candidate.id);
+  })();
+}
+
 export function heartbeatJob(id: string, token: string, now = Date.now()): boolean {
   return (
     getDatabase()

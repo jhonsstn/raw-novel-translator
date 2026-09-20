@@ -2,6 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { getDatabase } from '@novel/db';
 import {
   createSourceTransport,
+  sourceById,
+  sourceForUrl,
   type ChapterRef,
   type NovelRef,
   type SourceAdapter,
@@ -10,7 +12,6 @@ import {
 import { AppError } from './errors.js';
 import { deferParentJob, enqueueJob, finalizeParentJob, type Job } from './jobs.js';
 import { normalizeNovelText } from './novel-metadata.js';
-import { configuredSourceById, configuredSourceForUrl } from './source-definitions.js';
 
 interface NovelRow {
   id: string;
@@ -138,27 +139,37 @@ export function startImport(input: ImportInput): Job {
     throw new AppError('INVALID_URL', 'Enter a valid chapter URL');
   }
   parsed.hash = '';
-  const adapter = configuredSourceForUrl(parsed);
-  const settings = getDatabase()
-    .sqlite.prepare('SELECT enabled FROM source_settings WHERE source_id=?')
-    .get(adapter.id);
+  const adapter = sourceForUrl(parsed);
+  const sqlite = getDatabase().sqlite;
+  sqlite.prepare('INSERT OR IGNORE INTO source_settings(source_id) VALUES (?)').run(adapter.id);
+  const settings = sqlite.prepare('SELECT enabled FROM source_settings WHERE source_id=?').get(adapter.id);
   if (!settings || typeof settings !== 'object' || !('enabled' in settings) || settings.enabled !== 1)
     throw new AppError('SOURCE_DISABLED', 'This source is disabled', 409);
-  const payload = { ...normalized, url: parsed.href };
+  const payload = { ...normalized, url: parsed.href, sourceId: adapter.id };
   const key = createHash('sha256').update(JSON.stringify(payload)).digest('hex');
   return enqueueJob({ kind: 'import', payload, dedupeKey: `import:${key}`, origin: 'manual' });
 }
 
 export function queueCheckUpdates(novelId: string, origin: 'manual' | 'automatic' = 'manual'): Job {
-  const novel = getDatabase().sqlite.prepare('SELECT id FROM novels WHERE id=?').get(novelId);
+  const novel = getDatabase().sqlite.prepare('SELECT id,source_id FROM novels WHERE id=?').get(novelId) as
+    | { id: string; source_id: string }
+    | undefined;
   if (!novel) throw new AppError('NOVEL_NOT_FOUND', 'Novel not found', 404);
-  return enqueueJob({ kind: 'check_updates', payload: { novelId }, dedupeKey: `check:${novelId}`, origin, novelId });
+  return enqueueJob({
+    kind: 'check_updates',
+    payload: { novelId, sourceId: novel.source_id },
+    dedupeKey: `check:${novelId}`,
+    origin,
+    novelId,
+  });
 }
 
 export function queueChapterFetch(chapterId: string): Job {
   const sqlite = getDatabase().sqlite;
-  const chapter = sqlite.prepare('SELECT id,novel_id FROM chapters WHERE id=?').get(chapterId) as
-    | { id: string; novel_id: string }
+  const chapter = sqlite
+    .prepare('SELECT c.id,c.novel_id,n.source_id FROM chapters c JOIN novels n ON n.id=c.novel_id WHERE c.id=?')
+    .get(chapterId) as
+    | { id: string; novel_id: string; source_id: string }
     | undefined;
   if (!chapter) throw new AppError('CHAPTER_NOT_FOUND', 'Chapter not found', 404);
   sqlite.transaction(() => {
@@ -170,7 +181,7 @@ export function queueChapterFetch(chapterId: string): Job {
   })();
   return enqueueJob({
     kind: 'fetch_chapter',
-    payload: { chapterId },
+    payload: { chapterId, sourceId: chapter.source_id },
     dedupeKey: `fetch:${chapterId}`,
     origin: 'manual',
     novelId: chapter.novel_id,
@@ -286,7 +297,7 @@ export async function handleImportJob(job: Job, signal: AbortSignal): Promise<{ 
   const url = new URL(input.url);
   url.hash = '';
   input.url = url.href;
-  const adapter = configuredSourceForUrl(url);
+  const adapter = sourceForUrl(url);
   const context = contextFor(adapter, signal);
   const novel = adapter.resolveNovel(url);
   const listed = await adapter.listChapters(novel, context);
@@ -294,7 +305,7 @@ export async function handleImportJob(job: Job, signal: AbortSignal): Promise<{ 
   for (const chapterId of result.fetchChapterIds)
     enqueueJob({
       kind: 'fetch_chapter',
-      payload: { chapterId },
+      payload: { chapterId, sourceId: adapter.id },
       dedupeKey: `fetch:${chapterId}`,
       parentJobId: job.id,
       novelId: result.novelId,
@@ -321,7 +332,7 @@ export async function handleCheckUpdatesJob(job: Job, signal: AbortSignal): Prom
   const sqlite = getDatabase().sqlite;
   const novel = sqlite.prepare('SELECT * FROM novels WHERE id=?').get(novelId) as NovelRow | undefined;
   if (!novel) throw new AppError('NOVEL_NOT_FOUND', 'Novel not found', 404);
-  const adapter = configuredSourceById(novel.source_id);
+  const adapter = sourceById(novel.source_id);
   const context = contextFor(adapter, signal);
   const listed = await adapter.listChapters(
     { sourceNovelId: novel.source_novel_id, indexUrl: novel.index_url },
@@ -364,7 +375,7 @@ export async function handleCheckUpdatesJob(job: Job, signal: AbortSignal): Prom
   for (const chapterId of missing)
     enqueueJob({
       kind: 'fetch_chapter',
-      payload: { chapterId },
+      payload: { chapterId, sourceId: novel.source_id },
       dedupeKey: `fetch:${chapterId}`,
       parentJobId: job.id,
       novelId,
@@ -398,7 +409,7 @@ export async function handleFetchChapterJob(job: Job, signal: AbortSignal): Prom
   )
     throw new AppError('CHAPTER_NOT_FOUND', 'Chapter not found', 404);
   if ('paragraphs' in row && row.paragraphs !== null) return;
-  const adapter = configuredSourceById(row.source_id);
+  const adapter = sourceById(row.source_id);
   const result = await adapter.fetchChapter(
     { sourceChapterId: row.source_chapter_id, url: row.canonical_url, ordinal: row.ordinal, title: row.title },
     contextFor(adapter, signal),
@@ -414,7 +425,7 @@ export async function handleFetchChapterJob(job: Job, signal: AbortSignal): Prom
 
 export async function handleSourceCheckJob(job: Job, signal: AbortSignal): Promise<Record<string, unknown>> {
   const sourceId = requireString(job.payload, 'sourceId');
-  const adapter = configuredSourceById(sourceId);
+  const adapter = sourceById(sourceId);
   const sqlite = getDatabase().sqlite;
   const known = sqlite
     .prepare('SELECT source_novel_id,index_url FROM novels WHERE source_id=? ORDER BY created_at LIMIT 1')

@@ -1,8 +1,8 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { getDatabase } from '@novel/db';
+import { listSourceAdapters } from '@novel/sources';
 import { AppError } from './errors.js';
 import { enqueueJob } from './jobs.js';
-import { listSourceDefinitions } from './source-definitions.js';
 
 export interface ProviderSettingsView {
   baseUrl: string | null;
@@ -182,25 +182,36 @@ interface SourceSettingsRow {
   source_id: string;
   enabled: number;
   request_interval_ms: number;
+  download_concurrency: number;
   next_request_at: number;
   last_error: string | null;
   last_checked_at: number | null;
 }
 
 export function listSourceSettings() {
+  const adapters = listSourceAdapters();
+  const sqlite = getDatabase().sqlite;
+  const insert = sqlite.prepare('INSERT OR IGNORE INTO source_settings(source_id) VALUES (?)');
+  sqlite.transaction(() => {
+    for (const adapter of adapters) insert.run(adapter.id);
+  })();
   const rows = getDatabase()
     .sqlite.prepare(
-      'SELECT source_id,enabled,request_interval_ms,next_request_at,last_error,last_checked_at FROM source_settings ORDER BY source_id',
+      'SELECT source_id,enabled,request_interval_ms,download_concurrency,next_request_at,last_error,last_checked_at FROM source_settings ORDER BY source_id',
     )
     .all() as SourceSettingsRow[];
   const settings = new Map(rows.map((value) => [value.source_id, value]));
-  return listSourceDefinitions().map((definition) => {
-    const value = settings.get(definition.id);
+  return adapters.map((adapter) => {
+    const value = settings.get(adapter.id);
     return {
-      ...definition,
-      sourceId: definition.id,
+      id: adapter.id,
+      sourceId: adapter.id,
+      name: adapter.name,
+      siteUrl: adapter.siteUrl,
+      version: adapter.version,
       enabled: value?.enabled === 1,
       requestIntervalMs: value?.request_interval_ms ?? 2000,
+      downloadConcurrency: value?.download_concurrency ?? 2,
       nextRequestAt: value?.next_request_at ?? 0,
       lastError: value?.last_error ?? null,
       lastCheckedAt: value?.last_checked_at ?? null,
@@ -210,28 +221,41 @@ export function listSourceSettings() {
 
 export function updateSourceSettings(
   sourceId: string,
-  input: { enabled?: boolean | undefined; requestIntervalMs?: number | undefined },
+  input: {
+    enabled?: boolean | undefined;
+    requestIntervalMs?: number | undefined;
+    downloadConcurrency?: number | undefined;
+  },
 ) {
-  const existing = getDatabase()
-    .sqlite.prepare('SELECT source_id FROM source_settings WHERE source_id=?')
-    .get(sourceId);
-  if (!existing) throw new AppError('SOURCE_NOT_FOUND', 'Source not found', 404);
+  if (!listSourceSettings().some((source) => source.sourceId === sourceId))
+    throw new AppError('SOURCE_NOT_FOUND', 'Source not found', 404);
   if (
     input.requestIntervalMs !== undefined &&
     (!Number.isInteger(input.requestIntervalMs) || input.requestIntervalMs < 2000)
   )
     throw new AppError('INVALID_SOURCE_INTERVAL', 'Source interval must be at least 2000ms');
+  if (
+    input.downloadConcurrency !== undefined &&
+    (!Number.isInteger(input.downloadConcurrency) || input.downloadConcurrency < 1 || input.downloadConcurrency > 20)
+  )
+    throw new AppError('INVALID_SOURCE_CONCURRENCY', 'Parallel downloads must be between 1 and 20');
   getDatabase()
     .sqlite.prepare(
-      'UPDATE source_settings SET enabled=COALESCE(?,enabled),request_interval_ms=COALESCE(?,request_interval_ms) WHERE source_id=?',
+      'UPDATE source_settings SET enabled=COALESCE(?,enabled),request_interval_ms=COALESCE(?,request_interval_ms),download_concurrency=COALESCE(?,download_concurrency) WHERE source_id=?',
     )
-    .run(input.enabled === undefined ? null : input.enabled ? 1 : 0, input.requestIntervalMs ?? null, sourceId);
+    .run(
+      input.enabled === undefined ? null : input.enabled ? 1 : 0,
+      input.requestIntervalMs ?? null,
+      input.downloadConcurrency ?? null,
+      sourceId,
+    );
   return listSourceSettings().find((item) => item.sourceId === sourceId);
 }
 
 export function queueSourceCheck(sourceId: string) {
   const source = listSourceSettings().find((item) => item.sourceId === sourceId);
   if (!source) throw new AppError('SOURCE_NOT_FOUND', 'Source not found', 404);
+  if (!source.enabled) throw new AppError('SOURCE_DISABLED', 'Enable this source before testing it', 409);
   return enqueueJob({
     kind: 'source_check',
     payload: { sourceId },

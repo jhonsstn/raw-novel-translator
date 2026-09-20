@@ -1,5 +1,5 @@
 'use client';
-import { CheckCircle2, Link, Loader2, Pause, Play, Plus, Save, Trash2, X } from 'lucide-react';
+import { CheckCircle2, Link, Loader2, Pause, Play, Save } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useJobFeedback, isJobFeedbackActive } from '../lib/use-job-feedback';
 import { SelectMenu } from './select-menu';
@@ -18,26 +18,13 @@ interface Source {
   sourceId: string;
   name: string;
   siteUrl: string;
-  chapterPathPattern: string;
-  indexPathTemplate: string;
-  novelIdTemplate: string | null;
-  chapterIdTemplate: string | null;
-  chapterLinkSelector: string;
-  chapterTitleSelector: string;
-  chapterTitleExcludeSelector: string | null;
-  chapterContentSelector: string;
-  chapterContentStartSelector: string | null;
-  chapterContentEndSelector: string | null;
-  chapterContentEndText: string | null;
-  chapterContentExcludeSelector: string | null;
+  version: string;
   enabled: boolean;
   requestIntervalMs: number;
+  downloadConcurrency: number;
   lastError: string | null;
   lastCheckedAt: number | null;
 }
-type SourceDraft = Omit<Source, 'id' | 'sourceId' | 'enabled' | 'requestIntervalMs' | 'lastError' | 'lastCheckedAt'> & {
-  sourceId?: string;
-};
 interface Health {
   heartbeatAt: number | null;
   healthy: boolean;
@@ -78,43 +65,6 @@ function apiError(value: unknown, fallback: string) {
     : fallback;
 }
 
-const emptySource: SourceDraft = {
-  name: '',
-  siteUrl: '',
-  chapterPathPattern: '',
-  indexPathTemplate: '',
-  novelIdTemplate: null,
-  chapterIdTemplate: null,
-  chapterLinkSelector: '',
-  chapterTitleSelector: 'h1',
-  chapterTitleExcludeSelector: null,
-  chapterContentSelector: 'body',
-  chapterContentStartSelector: null,
-  chapterContentEndSelector: null,
-  chapterContentEndText: null,
-  chapterContentExcludeSelector: 'script,style,iframe',
-};
-
-function draftFrom(source: Source): SourceDraft {
-  return {
-    sourceId: source.sourceId,
-    name: source.name,
-    siteUrl: source.siteUrl,
-    chapterPathPattern: source.chapterPathPattern,
-    indexPathTemplate: source.indexPathTemplate,
-    novelIdTemplate: source.novelIdTemplate,
-    chapterIdTemplate: source.chapterIdTemplate,
-    chapterLinkSelector: source.chapterLinkSelector,
-    chapterTitleSelector: source.chapterTitleSelector,
-    chapterTitleExcludeSelector: source.chapterTitleExcludeSelector,
-    chapterContentSelector: source.chapterContentSelector,
-    chapterContentStartSelector: source.chapterContentStartSelector,
-    chapterContentEndSelector: source.chapterContentEndSelector,
-    chapterContentEndText: source.chapterContentEndText,
-    chapterContentExcludeSelector: source.chapterContentExcludeSelector,
-  };
-}
-
 const buttonClass =
   'inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] border border-line bg-card px-3.5 text-[13px] font-bold text-ink transition-[transform,border-color,background-color,box-shadow] duration-150 enabled:hover:-translate-y-px enabled:hover:border-line-strong enabled:hover:bg-card-hover enabled:hover:shadow-button';
 const primaryButtonClass =
@@ -141,8 +91,6 @@ export function SettingsClient({ tab }: { tab: Tab }) {
   const [error, setError] = useState('');
   const [fontSize, setFontSize] = useState(20);
   const [lineHeight, setLineHeight] = useState(1.85);
-  const [sourceDraft, setSourceDraft] = useState<SourceDraft | null>(null);
-  const [savingSource, setSavingSource] = useState(false);
   const { actions: jobActions, start: startJob } = useJobFeedback('settings');
   const refreshedSourceTests = useRef(new Set<string>());
   const loadSources = useCallback(async () => {
@@ -236,7 +184,10 @@ export function SettingsClient({ tab }: { tab: Tab }) {
     const value: unknown = await response.json();
     if (response.ok && isProvider(value)) setProvider(value);
   }
-  async function updateSource(source: Source, changes: { enabled?: boolean; requestIntervalMs?: number }) {
+  async function updateSource(
+    source: Source,
+    changes: { enabled?: boolean; requestIntervalMs?: number; downloadConcurrency?: number },
+  ) {
     const response = await fetch(`/api/sources/${source.sourceId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -252,38 +203,6 @@ export function SettingsClient({ tab }: { tab: Tab }) {
   function testSource(sourceId: string) {
     return startJob(`source-test:${sourceId}`, `/api/sources/${sourceId}/check`);
   }
-  async function saveSource(event: React.FormEvent) {
-    event.preventDefault();
-    if (!sourceDraft || savingSource) return;
-    setSavingSource(true);
-    setError('');
-    const id = sourceDraft.sourceId;
-    const payload = { ...sourceDraft };
-    delete payload.sourceId;
-    const response = await fetch(id ? `/api/sources/${id}` : '/api/sources', {
-      method: id ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const value: unknown = await response.json().catch(() => null);
-    if (response.ok) {
-      setSourceDraft(null);
-      setMessage(id ? 'Source saved.' : 'Source added.');
-      await load();
-    } else setError(apiError(value, 'Could not save source.'));
-    setSavingSource(false);
-  }
-  async function removeSource(source: Source) {
-    if (!window.confirm(`Delete source “${source.name}”?`)) return;
-    const response = await fetch(`/api/sources/${source.sourceId}`, { method: 'DELETE' });
-    if (response.ok) {
-      setMessage('Source deleted.');
-      await load();
-    } else {
-      const value: unknown = await response.json().catch(() => null);
-      setError(apiError(value, 'Could not delete source.'));
-    }
-  }
   async function updateNovel(novel: Novel, changes: { autoTranslate?: boolean; autoCheck?: boolean }) {
     const response = await fetch(`/api/novels/${novel.id}`, {
       method: 'PATCH',
@@ -297,22 +216,6 @@ export function SettingsClient({ tab }: { tab: Tab }) {
     localStorage.setItem('reader-font-size', String(fontSize));
     localStorage.setItem('reader-line-height', String(lineHeight));
     setMessage('Reader defaults saved in this browser.');
-  }
-  function setDraft(key: keyof SourceDraft, value: string) {
-    if (!sourceDraft) return;
-    setSourceDraft({
-      ...sourceDraft,
-      [key]:
-        value.trim() === '' &&
-        key !== 'name' &&
-        key !== 'siteUrl' &&
-        key !== 'chapterPathPattern' &&
-        key !== 'indexPathTemplate' &&
-        key !== 'chapterLinkSelector' &&
-        key !== 'chapterTitleSelector'
-          ? null
-          : value,
-    });
   }
   if (!provider)
     return (
@@ -501,168 +404,12 @@ export function SettingsClient({ tab }: { tab: Tab }) {
       )}
       {tab === 'Sources' && (
         <div className="grid gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-[9px]">
-            <div>
-              <h2>Scraping sources</h2>
-              <p className="text-muted">
-                Add sites without writing code. URL templates use regex capture groups such as {'{1}'}.
-              </p>
-            </div>
-            <button className={primaryButtonClass} onClick={() => setSourceDraft({ ...emptySource })}>
-              <Plus size={16} /> Add source
-            </button>
+          <div>
+            <h2>Scraping sources</h2>
+            <p className="mt-1 text-sm text-muted">
+              Source adapters are maintained in code. Configure only how each adapter runs here.
+            </p>
           </div>
-          {sourceDraft && (
-            <form className={`${panelClass} grid gap-4`} onSubmit={saveSource}>
-              <div className="flex flex-wrap items-center justify-between gap-[9px]">
-                <h2>{sourceDraft.sourceId ? 'Edit source' : 'New source'}</h2>
-                <button className={buttonClass} type="button" onClick={() => setSourceDraft(null)}>
-                  <X size={16} /> Close
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-3.5 max-[760px]:grid-cols-1">
-                <label className={fieldClass}>
-                  Name
-                  <input
-                    className={inputClass}
-                    required
-                    value={sourceDraft.name}
-                    onChange={(e) => setDraft('name', e.target.value)}
-                  />
-                </label>
-                <label className={fieldClass}>
-                  Site URL
-                  <input
-                    className={inputClass}
-                    type="url"
-                    required
-                    placeholder="https://example.com"
-                    value={sourceDraft.siteUrl}
-                    onChange={(e) => setDraft('siteUrl', e.target.value)}
-                  />
-                </label>
-                <label className={fieldClass}>
-                  Chapter URL pattern (regex)
-                  <input
-                    className={inputClass}
-                    required
-                    placeholder="^/book/(\\d+)/(\\d+)\\.html$"
-                    value={sourceDraft.chapterPathPattern}
-                    onChange={(e) => setDraft('chapterPathPattern', e.target.value)}
-                  />
-                </label>
-                <label className={fieldClass}>
-                  Index path template
-                  <input
-                    className={inputClass}
-                    required
-                    placeholder="/book/{1}/index.html"
-                    value={sourceDraft.indexPathTemplate}
-                    onChange={(e) => setDraft('indexPathTemplate', e.target.value)}
-                  />
-                </label>
-                <label className={fieldClass}>
-                  Novel ID template (optional)
-                  <input
-                    className={inputClass}
-                    placeholder="{1}"
-                    value={sourceDraft.novelIdTemplate ?? ''}
-                    onChange={(e) => setDraft('novelIdTemplate', e.target.value)}
-                  />
-                </label>
-                <label className={fieldClass}>
-                  Chapter ID template (optional)
-                  <input
-                    className={inputClass}
-                    placeholder="{2}"
-                    value={sourceDraft.chapterIdTemplate ?? ''}
-                    onChange={(e) => setDraft('chapterIdTemplate', e.target.value)}
-                  />
-                </label>
-                <label className={fieldClass}>
-                  Directory chapter-link selector
-                  <input
-                    className={inputClass}
-                    required
-                    placeholder=".chapter-list a"
-                    value={sourceDraft.chapterLinkSelector}
-                    onChange={(e) => setDraft('chapterLinkSelector', e.target.value)}
-                  />
-                </label>
-                <label className={fieldClass}>
-                  Chapter title selector
-                  <input
-                    className={inputClass}
-                    required
-                    placeholder="h1"
-                    value={sourceDraft.chapterTitleSelector}
-                    onChange={(e) => setDraft('chapterTitleSelector', e.target.value)}
-                  />
-                </label>
-                <label className={fieldClass}>
-                  Title exclude selector (optional)
-                  <input
-                    className={inputClass}
-                    placeholder="a,.badge"
-                    value={sourceDraft.chapterTitleExcludeSelector ?? ''}
-                    onChange={(e) => setDraft('chapterTitleExcludeSelector', e.target.value)}
-                  />
-                </label>
-                <label className={fieldClass}>
-                  Content container selector
-                  <input
-                    className={inputClass}
-                    placeholder="#content"
-                    value={sourceDraft.chapterContentSelector ?? 'body'}
-                    onChange={(e) => setDraft('chapterContentSelector', e.target.value)}
-                  />
-                </label>
-                <label className={fieldClass}>
-                  Content start selector (optional)
-                  <input
-                    className={inputClass}
-                    placeholder=".chapter-header"
-                    value={sourceDraft.chapterContentStartSelector ?? ''}
-                    onChange={(e) => setDraft('chapterContentStartSelector', e.target.value)}
-                  />
-                </label>
-                <label className={fieldClass}>
-                  Content end selector (optional)
-                  <input
-                    className={inputClass}
-                    placeholder=".chapter-footer"
-                    value={sourceDraft.chapterContentEndSelector ?? ''}
-                    onChange={(e) => setDraft('chapterContentEndSelector', e.target.value)}
-                  />
-                </label>
-                <label className={fieldClass}>
-                  Content end text (optional)
-                  <input
-                    className={inputClass}
-                    placeholder="Advertisement starts"
-                    value={sourceDraft.chapterContentEndText ?? ''}
-                    onChange={(e) => setDraft('chapterContentEndText', e.target.value)}
-                  />
-                </label>
-                <label className={fieldClass}>
-                  Content exclude selector
-                  <input
-                    className={inputClass}
-                    placeholder="script,style,.ad"
-                    value={sourceDraft.chapterContentExcludeSelector ?? ''}
-                    onChange={(e) => setDraft('chapterContentExcludeSelector', e.target.value)}
-                  />
-                </label>
-              </div>
-              <p className="text-muted">
-                Use a content container for normal pages. Use both start and end selectors when the novel text sits
-                between page elements instead of inside one container.
-              </p>
-              <button className={primaryButtonClass} type="submit" disabled={savingSource}>
-                <Save size={16} /> {savingSource ? 'Saving…' : 'Save source'}
-              </button>
-            </form>
-          )}
           {sources.map((source) => {
             const sourceTest = jobActions[`source-test:${source.sourceId}`];
             const sourceTestActive = isJobFeedbackActive(sourceTest);
@@ -693,7 +440,7 @@ export function SettingsClient({ tab }: { tab: Tab }) {
                   <div>
                     <strong>{source.name}</strong>
                     <div className="text-muted">
-                      {source.siteUrl} · {source.sourceId}
+                      {source.siteUrl} · {source.version}
                     </div>
                     <div className="text-muted">
                       {source.lastError ??
@@ -703,24 +450,14 @@ export function SettingsClient({ tab }: { tab: Tab }) {
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-[9px]">
-                    <button className={buttonClass} onClick={() => setSourceDraft(draftFrom(source))}>
-                      Edit
-                    </button>
                     <button
                       className={`${buttonClass} disabled:cursor-not-allowed disabled:opacity-60`}
                       aria-busy={sourceTestActive}
-                      disabled={sourceTestActive}
+                      disabled={sourceTestActive || !source.enabled}
                       onClick={() => void testSource(source.sourceId)}
                     >
                       {sourceTestActive && <Loader2 className="animate-spin" size={16} />}
                       {sourceTestLabel}
-                    </button>
-                    <button
-                      className={buttonClass}
-                      aria-label={`Delete ${source.name}`}
-                      onClick={() => void removeSource(source)}
-                    >
-                      <Trash2 size={16} />
                     </button>
                     <button
                       className={`${switchClass} ${source.enabled ? 'bg-success after:translate-x-5' : ''}`}
@@ -749,17 +486,39 @@ export function SettingsClient({ tab }: { tab: Tab }) {
                     )}
                   </div>
                 )}
-                <label className={`${fieldClass} mt-3.5 max-w-60`}>
-                  Request interval (ms)
-                  <input
-                    className={inputClass}
-                    type="number"
-                    min="2000"
-                    step="500"
-                    value={source.requestIntervalMs}
-                    onChange={(event) => void updateSource(source, { requestIntervalMs: Number(event.target.value) })}
-                  />
-                </label>
+                <div className="mt-4 grid max-w-xl grid-cols-2 gap-3.5 max-[760px]:grid-cols-1">
+                  <label className={fieldClass}>
+                    Parallel downloads
+                    <input
+                      className={inputClass}
+                      type="number"
+                      min="1"
+                      max="20"
+                      step="1"
+                      value={source.downloadConcurrency}
+                      onChange={(event) =>
+                        void updateSource(source, { downloadConcurrency: Number(event.target.value) })
+                      }
+                    />
+                    <span className="font-normal leading-relaxed text-muted">
+                      Maximum source jobs that may run at the same time.
+                    </span>
+                  </label>
+                  <label className={fieldClass}>
+                    Request interval (ms)
+                    <input
+                      className={inputClass}
+                      type="number"
+                      min="2000"
+                      step="500"
+                      value={source.requestIntervalMs}
+                      onChange={(event) => void updateSource(source, { requestIntervalMs: Number(event.target.value) })}
+                    />
+                    <span className="font-normal leading-relaxed text-muted">
+                      Minimum delay between requests sent to this site.
+                    </span>
+                  </label>
+                </div>
               </section>
             );
           })}

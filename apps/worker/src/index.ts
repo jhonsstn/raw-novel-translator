@@ -2,10 +2,12 @@ import { getDatabase, migrate } from '@novel/db';
 import {
   assertEncryptionConfiguration,
   claimJob,
+  claimSourceJob,
   failJob,
   finalizeParentJob,
   finishJob,
   getProviderSettings,
+  listSourceSettings,
   handleCheckUpdatesJob,
   handleFetchChapterJob,
   handleImportJob,
@@ -64,18 +66,39 @@ async function runJob(job: Job): Promise<void> {
 }
 
 async function sourceLaneLoop(): Promise<void> {
+  const running = new Map<Promise<void>, string>();
+  const start = (job: Job, sourceId: string) => {
+    const task: Promise<void> = runJob(job).finally(() => running.delete(task));
+    running.set(task, sourceId);
+  };
   while (!shutdown.signal.aborted) {
-    const job = claimJob('source', Date.now());
-    if (job) await runJob(job);
-    else await sleep(300);
+    const settings = listSourceSettings().filter((source) => source.enabled);
+    for (;;) {
+      const counts = new Map<string, number>();
+      for (const sourceId of running.values()) counts.set(sourceId, (counts.get(sourceId) ?? 0) + 1);
+      const available = settings
+        .filter((source) => (counts.get(source.sourceId) ?? 0) < source.downloadConcurrency)
+        .map((source) => source.sourceId);
+      const job = claimSourceJob(Date.now(), available);
+      if (!job) break;
+      const sourceId = job.payload.sourceId;
+      if (typeof sourceId !== 'string') {
+        failJob(job.id, job.leaseToken!, new Error('Source job is missing its source identifier'));
+        continue;
+      }
+      start(job, sourceId);
+    }
+    if (shutdown.signal.aborted) break;
+    if (running.size === 0) await sleep(300);
+    else await Promise.race([sleep(100), ...running.keys()]);
   }
+  await Promise.allSettled(running.keys());
 }
 
 async function translationLaneLoop(): Promise<void> {
   const running = new Set<Promise<void>>();
   const start = (job: Job) => {
-    let task: Promise<void>;
-    task = runJob(job).finally(() => running.delete(task));
+    const task: Promise<void> = runJob(job).finally(() => running.delete(task));
     running.add(task);
   };
   while (!shutdown.signal.aborted) {

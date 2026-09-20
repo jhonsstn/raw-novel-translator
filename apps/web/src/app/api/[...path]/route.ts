@@ -2,9 +2,7 @@ import { migrate } from '@novel/db';
 import {
   AppError,
   cancelJob,
-  createSourceDefinition,
   createNovelEpub,
-  deleteSourceDefinition,
   getChapter,
   getCover,
   getJob,
@@ -30,7 +28,6 @@ import {
   updateNovelMetadata,
   updateProviderSettings,
   updateReadingProgress,
-  updateSourceDefinition,
   updateSourceSettings,
 } from '@novel/core';
 import { z, ZodError, type ZodType } from 'zod';
@@ -153,25 +150,10 @@ const providerSchema = z
   .strict();
 const pauseSchema = z.object({ paused: z.boolean() }).strict();
 const sourceSchema = z
-  .object({ enabled: z.boolean().optional(), requestIntervalMs: z.number().int().optional() })
-  .strict();
-const optionalSourceText = z.string().max(1000).nullable().optional();
-const sourceDefinitionSchema = z
   .object({
-    name: z.string().trim().min(1).max(100),
-    siteUrl: z.string().url().max(1000),
-    chapterPathPattern: z.string().min(1).max(1000),
-    indexPathTemplate: z.string().min(1).max(1000),
-    novelIdTemplate: optionalSourceText,
-    chapterIdTemplate: optionalSourceText,
-    chapterLinkSelector: z.string().min(1).max(1000),
-    chapterTitleSelector: z.string().min(1).max(1000),
-    chapterTitleExcludeSelector: optionalSourceText,
-    chapterContentSelector: optionalSourceText,
-    chapterContentStartSelector: optionalSourceText,
-    chapterContentEndSelector: optionalSourceText,
-    chapterContentEndText: optionalSourceText,
-    chapterContentExcludeSelector: optionalSourceText,
+    enabled: z.boolean().optional(),
+    requestIntervalMs: z.number().int().optional(),
+    downloadConcurrency: z.number().int().optional(),
   })
   .strict();
 
@@ -327,24 +309,9 @@ async function dispatch(request: Request, context: RouteContext): Promise<Respon
   }
   if (path.length === 1 && path[0] === 'sources') {
     if (method === 'GET') return json(listSourceSettings());
-    if (method === 'POST') {
-      const created = createSourceDefinition(await jsonBody(request, sourceDefinitionSchema));
-      return json(
-        listSourceSettings().find((item) => item.sourceId === created.id),
-        201,
-      );
-    }
   }
   if (path[0] === 'sources' && path.length === 2) {
     if (method === 'PATCH') return json(updateSourceSettings(path[1]!, await jsonBody(request, sourceSchema)));
-    if (method === 'PUT') {
-      updateSourceDefinition(path[1]!, await jsonBody(request, sourceDefinitionSchema));
-      return json(listSourceSettings().find((item) => item.sourceId === path[1]));
-    }
-    if (method === 'DELETE') {
-      deleteSourceDefinition(path[1]!);
-      return new Response(null, { status: 204 });
-    }
   }
   if (method === 'POST' && path[0] === 'sources' && path.length === 3 && path[2] === 'check')
     return jobResponse(queueSourceCheck(path[1]!));
