@@ -198,3 +198,27 @@
     animation-duration: 0.01ms !important;
   }
 }
+
+@media (max-width: 760px) {
+  body:has(.reader-shell) {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  body:has(.reader-shell) > .workspace-content {
+    height: calc(100dvh - 4rem);
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  body:has(.reader-shell) main {
+    height: 100%;
+    overflow: hidden;
+    padding-top: 0;
+    padding-bottom: max(0.875rem, env(safe-area-inset-bottom));
+  }
+
+  body:has(.reader-focus) > .workspace-content {
+    height: 100dvh;
+  }
+}

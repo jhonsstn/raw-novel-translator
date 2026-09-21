@@ -231,9 +231,11 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
   const segmentClass =
     'min-h-[34px] whitespace-nowrap rounded-lg border-0 bg-transparent px-[13px] text-[13px] font-[650] text-muted hover:text-ink';
   return (
-    <div className={focus ? 'reader-focus' : undefined}>
+    <div
+      className={`${focus ? 'reader-focus' : ''} reader-shell max-[760px]:flex max-[760px]:h-full max-[760px]:min-h-0 max-[760px]:flex-col`}
+    >
       <div
-        className={`sticky z-10 -mx-8 -mt-[52px] mb-[26px] border-b border-line bg-[color-mix(in_srgb,var(--color-paper)_88%,transparent)] px-[max(32px,calc((100%_-_1240px)/2))] py-[13px] backdrop-blur-2xl max-[760px]:-mx-3.5 max-[760px]:-mt-8 max-[760px]:mb-5 max-[760px]:px-3 max-[760px]:py-2.5 ${
+        className={`sticky z-10 -mx-8 -mt-[52px] mb-[26px] border-b border-line bg-[color-mix(in_srgb,var(--color-paper)_88%,transparent)] px-[max(32px,calc((100%_-_1240px)/2))] py-[13px] backdrop-blur-2xl max-[760px]:static max-[760px]:-mx-3.5 max-[760px]:mt-0 max-[760px]:mb-3 max-[760px]:shrink-0 max-[760px]:px-3 max-[760px]:py-2.5 ${
           focus ? 'top-0 max-[760px]:mt-0' : 'top-0 max-[760px]:top-16'
         }`}
       >
@@ -434,7 +436,7 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
         }}
       />
       <article
-        className="mx-auto h-[calc(100vh_-_260px)] min-h-[360px] w-[min(780px,100%)] overflow-auto rounded-[15px] border border-line bg-reader-paper p-[clamp(26px,5vw,60px)] font-serif text-reader shadow-card max-[760px]:h-[calc(100dvh_-_280px)] max-[760px]:min-h-80 max-[760px]:px-[19px] max-[760px]:py-[26px] [&_p]:mb-[1.25em]"
+        className="mx-auto h-[calc(100vh_-_260px)] min-h-[360px] w-[min(780px,100%)] overflow-auto rounded-[15px] border border-line bg-reader-paper p-[clamp(26px,5vw,60px)] font-serif text-reader shadow-card max-[760px]:h-auto max-[760px]:min-h-0 max-[760px]:flex-1 max-[760px]:overscroll-contain max-[760px]:px-[19px] max-[760px]:pt-[26px] max-[760px]:pb-[max(26px,env(safe-area-inset-bottom))] [&_p]:mb-[1.25em]"
         ref={contentRef}
         onScroll={scheduleSave}
         style={{ fontSize, lineHeight }}
@@ -460,7 +462,7 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
           <p className="text-muted">This chapter is still downloading.</p>
         )}
       </article>
-      <div className="mx-auto mt-5 flex w-[min(780px,100%)] flex-wrap items-center justify-between gap-2.5 max-[760px]:grid max-[760px]:grid-cols-2">
+      <div className="mx-auto mt-5 flex w-[min(780px,100%)] flex-wrap items-center justify-between gap-2.5 max-[760px]:hidden">
         <button className={buttonClass} disabled={!previous} onClick={() => previous && void go(previous)}>
           <ArrowLeft size={16} /> Previous
         </button>
