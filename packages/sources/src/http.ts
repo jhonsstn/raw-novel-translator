@@ -1,4 +1,4 @@
-import { lookup } from 'node:dns';
+import { lookup, type LookupAddress } from 'node:dns';
 import { isIP } from 'node:net';
 import iconv = require('iconv-lite');
 import { Agent, fetch, type Response } from 'undici';
@@ -123,6 +123,22 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   return promise;
 }
 
+async function assertPublicHost(hostname: string, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) throw signal.reason;
+  let addresses: LookupAddress[];
+  try {
+    addresses = await new Promise<LookupAddress[]>((resolve, reject) => {
+      lookup(hostname, { all: true, verbatim: true }, (error, values) => (error ? reject(error) : resolve(values)));
+    });
+  } catch (cause) {
+    if (signal.aborted) throw signal.reason;
+    throw new SourceError('SOURCE_NETWORK', `Resolving source host ${hostname} failed: ${String(cause)}`);
+  }
+  if (signal.aborted) throw signal.reason;
+  if (addresses.length === 0 || addresses.some((address) => !isPublicAddress(address.address)))
+    throw new SourceError('SOURCE_NETWORK', 'Source host resolves to a non-public address');
+}
+
 async function rawFetch(
   url: URL,
   limit: number,
@@ -173,6 +189,80 @@ async function rawFetch(
   throw new SourceError('SOURCE_REDIRECT', 'Source redirect exceeded the limit');
 }
 
+async function flaresolverrFetch(
+  url: URL,
+  limit: number,
+  signal: AbortSignal,
+  allowedHosts: ReadonlySet<string>,
+  endpoint: string,
+): Promise<{ html: string; status: number; retryAfter: null }> {
+  await assertPublicHost(url.hostname, signal);
+  let response: Response;
+  try {
+    response = await fetch(new URL('/v1', endpoint), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cmd: 'request.get', url: url.href, maxTimeout: 60_000 }),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(75_000)]),
+    });
+  } catch (cause) {
+    if (signal.aborted) throw signal.reason;
+    throw new SourceError('SOURCE_NETWORK', `FlareSolverr request failed: ${String(cause)}`);
+  }
+  if (!response.body) throw new SourceError('SOURCE_NETWORK', 'FlareSolverr response has no body');
+  let bytes: Buffer;
+  try {
+    bytes = await bodyBytes(response.body as unknown as ReadableStream<Uint8Array>, limit * 6 + 256 * 1024);
+  } catch (cause) {
+    if (signal.aborted) throw signal.reason;
+    if (cause instanceof SourceError) throw cause;
+    throw new SourceError('SOURCE_NETWORK', `Reading FlareSolverr response failed: ${String(cause)}`);
+  }
+  if (!response.ok) throw new SourceError('SOURCE_NETWORK', `FlareSolverr failed (HTTP ${response.status})`);
+  let result: unknown;
+  try {
+    result = JSON.parse(bytes.toString('utf8'));
+  } catch {
+    throw new SourceError('SOURCE_NETWORK', 'FlareSolverr returned invalid JSON');
+  }
+  if (!result || typeof result !== 'object' || !('status' in result) || typeof result.status !== 'string')
+    throw new SourceError('SOURCE_NETWORK', 'FlareSolverr returned an invalid result');
+  if (result.status !== 'ok')
+    throw new SourceError('SOURCE_BLOCKED', 'FlareSolverr did not solve the source challenge');
+  if (!('solution' in result) || !result.solution || typeof result.solution !== 'object')
+    throw new SourceError('SOURCE_NETWORK', 'FlareSolverr returned no solution');
+  const solution = result.solution;
+  if (
+    !('status' in solution) ||
+    typeof solution.status !== 'number' ||
+    !('url' in solution) ||
+    typeof solution.url !== 'string' ||
+    !('response' in solution) ||
+    typeof solution.response !== 'string' ||
+    !solution.response
+  )
+    throw new SourceError('SOURCE_NETWORK', 'FlareSolverr returned an invalid solution');
+  let finalUrl: URL;
+  try {
+    finalUrl = new URL(solution.url);
+  } catch {
+    throw new SourceError('SOURCE_REDIRECT', 'FlareSolverr returned an invalid source URL');
+  }
+  if (
+    finalUrl.protocol !== 'https:' ||
+    !allowedHosts.has(finalUrl.hostname) ||
+    finalUrl.port ||
+    finalUrl.username ||
+    finalUrl.password
+  )
+    throw new SourceError('SOURCE_REDIRECT', 'FlareSolverr redirected outside the approved host');
+  const html = Buffer.from(solution.response, 'utf8');
+  if (html.byteLength > limit) throw new SourceError('SOURCE_TOO_LARGE', 'Source response exceeded its size limit');
+  if (/cf-chl-|captcha|attention required/i.test(solution.response) && html.byteLength < 100_000)
+    throw new SourceError('SOURCE_BLOCKED', 'Source returned a challenge page');
+  return { html: solution.response, status: solution.status, retryAfter: null };
+}
+
 async function robots(
   origin: string,
   signal: AbortSignal,
@@ -193,6 +283,7 @@ export interface SourceTransportOptions {
   signal: AbortSignal;
   allowedHosts?: readonly string[];
   beforeRequest?: (minimumDelayMs: number) => Promise<void>;
+  flaresolverrUrl?: string;
 }
 
 export function createSourceTransport(options: SourceTransportOptions): (url: string) => Promise<string> {
@@ -208,7 +299,9 @@ export function createSourceTransport(options: SourceTransportOptions): (url: st
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         const limit = /index|list|目录/i.test(url.pathname) ? 8 * 1024 * 1024 : 2 * 1024 * 1024;
-        const response = await rawFetch(url, limit, options.signal, allowedHosts);
+        const response = options.flaresolverrUrl
+          ? await flaresolverrFetch(url, limit, options.signal, allowedHosts, options.flaresolverrUrl)
+          : await rawFetch(url, limit, options.signal, allowedHosts);
         if (response.status === 401 || response.status === 403)
           throw new SourceError('SOURCE_BLOCKED', `Source denied access (${response.status})`);
         if (response.status === 404) throw new SourceError('SOURCE_NOT_FOUND', 'Source page was not found');
@@ -221,7 +314,7 @@ export function createSourceTransport(options: SourceTransportOptions): (url: st
         }
         if (response.status >= 400)
           throw new SourceError('SOURCE_NETWORK', `Source request failed (${response.status})`);
-        return decodeSourceBytes(response.bytes, response.contentType);
+        return 'html' in response ? response.html : decodeSourceBytes(response.bytes, response.contentType);
       } catch (error) {
         if (error instanceof SourceError || options.signal.aborted || attempt === 2) throw error;
         await delay(attempt === 0 ? 10_000 : 30_000, options.signal);

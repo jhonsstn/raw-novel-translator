@@ -40,12 +40,36 @@ services:
     build:
       context: .
       target: worker
-    environment: *app-env
+    environment:
+      <<: *app-env
+      FLARESOLVERR_URL: http://flaresolverr:8191
     volumes: *app-volumes
     depends_on:
       migrate:
         condition: service_completed_successfully
+      flaresolverr:
+        condition: service_healthy
     restart: unless-stopped
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    environment:
+      LOG_LEVEL: info
+    ports:
+      - '127.0.0.1:${FLARESOLVERR_PORT:-8191}:8191'
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'python3',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8191/health', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 volumes:
   novel-data:

@@ -125,6 +125,8 @@ Adapters must use `SourceContext.fetchHtml`; do not call `fetch`, `undici`, or a
 - retries and rate limiting;
 - cancellation through `AbortSignal`.
 
+For Piaotia, the worker uses FlareSolverr for content pages when `FLARESOLVERR_URL` is set. Docker Compose sets it to `http://flaresolverr:8191` and waits for the service health check. Local workers can use `http://127.0.0.1:8191` after starting `docker compose up -d flaresolverr`; without the variable, requests use the direct transport. The robots policy is still fetched directly. The FlareSolverr service is exposed on the host only at `127.0.0.1:${FLARESOLVERR_PORT:-8191}` for diagnostics. A browser can follow intermediate redirects before its final URL is checked, so keep this path limited to the approved Piaotia host.
+
 Add every legitimate redirect or asset host deliberately to `hosts`. Never add broad host patterns or disable a guard to make one sample URL work.
 
 Use `SourceError` for expected source failures. Common codes include:

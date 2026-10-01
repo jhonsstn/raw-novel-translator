@@ -125,6 +125,9 @@ function contextFor(adapter: SourceAdapter, signal: AbortSignal): SourceContext 
       signal,
       allowedHosts: adapter.hosts,
       beforeRequest: (minimum) => reserveSourceRequest(adapter.id, minimum),
+      ...(adapter.id === 'piaotia' && process.env.FLARESOLVERR_URL
+        ? { flaresolverrUrl: process.env.FLARESOLVERR_URL }
+        : {}),
     }),
   };
 }
@@ -152,8 +155,7 @@ export function startImport(input: ImportInput): Job {
 
 export function queueCheckUpdates(novelId: string, origin: 'manual' | 'automatic' = 'manual'): Job {
   const novel = getDatabase().sqlite.prepare('SELECT id,source_id FROM novels WHERE id=?').get(novelId) as
-    | { id: string; source_id: string }
-    | undefined;
+    { id: string; source_id: string } | undefined;
   if (!novel) throw new AppError('NOVEL_NOT_FOUND', 'Novel not found', 404);
   return enqueueJob({
     kind: 'check_updates',
@@ -168,9 +170,7 @@ export function queueChapterFetch(chapterId: string): Job {
   const sqlite = getDatabase().sqlite;
   const chapter = sqlite
     .prepare('SELECT c.id,c.novel_id,n.source_id FROM chapters c JOIN novels n ON n.id=c.novel_id WHERE c.id=?')
-    .get(chapterId) as
-    | { id: string; novel_id: string; source_id: string }
-    | undefined;
+    .get(chapterId) as { id: string; novel_id: string; source_id: string } | undefined;
   if (!chapter) throw new AppError('CHAPTER_NOT_FOUND', 'Chapter not found', 404);
   sqlite.transaction(() => {
     sqlite.prepare('DELETE FROM translations WHERE chapter_id=?').run(chapterId);
