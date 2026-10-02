@@ -302,8 +302,9 @@ export async function handleImportJob(job: Job, signal: AbortSignal): Promise<{ 
   const novel = adapter.resolveNovel(url);
   const listed = await adapter.listChapters(novel, context);
   const result = saveDiscovery(adapter, input, novel, listed);
-  for (const chapterId of result.fetchChapterIds)
-    enqueueJob({
+  let queued = 0;
+  for (const chapterId of result.fetchChapterIds) {
+    const child = enqueueJob({
       kind: 'fetch_chapter',
       payload: { chapterId, sourceId: adapter.id },
       dedupeKey: `fetch:${chapterId}`,
@@ -311,18 +312,16 @@ export async function handleImportJob(job: Job, signal: AbortSignal): Promise<{ 
       novelId: result.novelId,
       chapterId,
     });
+    if (child.parentJobId === job.id) queued += 1;
+  }
   const progress = {
     discovered: result.discovered,
-    queued: result.fetchChapterIds.length,
+    queued,
     message: result.discovered === 0 ? 'No later chapters available' : undefined,
     novelId: result.novelId,
   };
-  if (result.fetchChapterIds.length === 0) {
-    deferParentJob(job.id, job.leaseToken, progress);
-    finalizeParentJob(job.id);
-    return { deferred: true };
-  }
   deferParentJob(job.id, job.leaseToken, progress);
+  finalizeParentJob(job.id);
   return { deferred: true };
 }
 
@@ -372,8 +371,9 @@ export async function handleCheckUpdatesJob(job: Job, signal: AbortSignal): Prom
       .run(now, now + 6 * 60 * 60 * 1000, now, novelId);
     return ids;
   })();
-  for (const chapterId of missing)
-    enqueueJob({
+  let queued = 0;
+  for (const chapterId of missing) {
+    const child = enqueueJob({
       kind: 'fetch_chapter',
       payload: { chapterId, sourceId: novel.source_id },
       dedupeKey: `fetch:${chapterId}`,
@@ -381,9 +381,11 @@ export async function handleCheckUpdatesJob(job: Job, signal: AbortSignal): Prom
       novelId,
       chapterId,
     });
-  const progress = { discovered: selected.length, queued: missing.length };
+    if (child.parentJobId === job.id) queued += 1;
+  }
+  const progress = { discovered: selected.length, queued };
   deferParentJob(job.id, job.leaseToken, progress);
-  if (missing.length === 0) finalizeParentJob(job.id);
+  finalizeParentJob(job.id);
   return { deferred: true };
 }
 

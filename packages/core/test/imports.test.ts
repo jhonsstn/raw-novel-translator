@@ -93,6 +93,34 @@ it('starts at the next entered number when the supplied chapter is excluded', as
   ]);
 });
 
+it('finishes an update check when missing chapters already have active downloads', async () => {
+  const imported = imports.startImport({
+    url: 'https://www.piaotia.com/html/10/20/17.html',
+    includeStart: true,
+    title: 'My title',
+    description: null,
+    chapterNumber: 42,
+  });
+  const importJob = jobs.claimJob('source', Date.now())!;
+  await imports.handleImportJob(importJob, new AbortController().signal);
+  const id = library.listNovels()[0]!.id;
+  expect(jobs.claimJob('source', Date.now())?.kind).toBe('fetch_chapter');
+  expect(jobs.claimJob('source', Date.now())?.kind).toBe('fetch_chapter');
+  jobs.cancelJob(imported.id);
+  const queued = imports.queueCheckUpdates(id);
+  const check = jobs.claimJob('source', Date.now())!;
+  expect(check.id).toBe(queued.id);
+
+  await imports.handleCheckUpdatesJob(check, new AbortController().signal);
+
+  expect(jobs.getJob(check.id)).toMatchObject({ status: 'succeeded', progress: { downloaded: 0, failed: 0 } });
+  const children = database.getDatabase().sqlite
+    .prepare("SELECT parent_job_id FROM jobs WHERE kind='fetch_chapter' AND novel_id=?")
+    .all(id) as Array<{ parent_job_id: string }>;
+  expect(children).toHaveLength(2);
+  expect(children.every((child) => child.parent_job_id !== check.id)).toBe(true);
+});
+
 it('rejects legacy import jobs instead of scraping missing manual metadata', async () => {
   const legacy: Job = {
     ...jobs.enqueueJob({
