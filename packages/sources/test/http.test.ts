@@ -16,6 +16,7 @@ vi.mock('undici', async (importOriginal) => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.resetAllMocks();
   dnsState.addresses = [{ address: '93.184.215.14', family: 4 }];
 });
@@ -31,10 +32,6 @@ function solverResult(url: string, status = 200, html = '<html>Chapter</html>') 
   return { status: 'ok', solution: { status, url, response: html } };
 }
 
-function setupRobots(body = 'User-agent: *\nAllow: /') {
-  vi.mocked(fetch).mockResolvedValueOnce(new Response(body, { status: 200 }));
-}
-
 function transport(
   host: string,
   signal = new AbortController().signal,
@@ -48,39 +45,39 @@ function transport(
   });
 }
 
-it('identifies a failed robots request and preserves its underlying network cause', async () => {
+it('identifies a failed page request and preserves its underlying network cause', async () => {
+  vi.useFakeTimers();
   const cause = Object.assign(new Error('getaddrinfo ENOTFOUND www.piaotia.com'), { code: 'ENOTFOUND' });
   const failure = new TypeError('fetch failed', { cause });
-  vi.mocked(fetch).mockRejectedValueOnce(failure);
+  vi.mocked(fetch).mockRejectedValue(failure);
   const transport = createSourceTransport({ signal: new AbortController().signal });
-  await expect(transport('https://www.piaotia.com/html/1/2/3.html?token=private')).rejects.toMatchObject({
-    message: 'GET https://www.piaotia.com/robots.txt failed',
+  const assertion = expect(transport('https://www.piaotia.com/html/1/2/3.html?token=private')).rejects.toMatchObject({
+    message: 'GET https://www.piaotia.com/html/1/2/3.html failed',
     cause: failure,
   });
+  await vi.runAllTimersAsync();
+  await assertion;
 });
 
-it('sends approved pages through FlareSolverr after robots and request spacing', async () => {
+it('sends pages through FlareSolverr after request spacing without fetching robots.txt', async () => {
   const { host, url } = source();
-  setupRobots();
   vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(solverResult(url))));
   const beforeRequest = vi.fn(async (minimum: number) => {
     expect(minimum).toBe(2000);
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   await expect(transport(host, undefined, beforeRequest)(url)).resolves.toBe('<html>Chapter</html>');
   expect(beforeRequest).toHaveBeenCalledOnce();
-  expect(fetch).toHaveBeenCalledTimes(2);
-  expect(String(vi.mocked(fetch).mock.calls[0]![0])).toBe(`https://${host}/robots.txt`);
-  expect(String(vi.mocked(fetch).mock.calls[1]![0])).toBe('http://flaresolverr:8191/v1');
-  const init = vi.mocked(fetch).mock.calls[1]![1]!;
+  expect(fetch).toHaveBeenCalledOnce();
+  expect(String(vi.mocked(fetch).mock.calls[0]![0])).toBe('http://flaresolverr:8191/v1');
+  const init = vi.mocked(fetch).mock.calls[0]![1]!;
   expect(init.method).toBe('POST');
   expect(JSON.parse(String(init.body))).toMatchObject({ cmd: 'request.get', url });
 });
 
 it('rejects FlareSolverr redirects outside the approved host', async () => {
   const { host, url } = source();
-  setupRobots();
   vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(solverResult('http://127.0.0.1/private'))));
   await expect(transport(host)(url)).rejects.toMatchObject({ code: 'SOURCE_REDIRECT' });
 });
@@ -90,14 +87,12 @@ it.each([
   [404, 'SOURCE_NOT_FOUND'],
 ])('maps source HTTP %i from FlareSolverr to %s', async (status, code) => {
   const { host, url } = source();
-  setupRobots();
   vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(solverResult(url, status))));
   await expect(transport(host)(url)).rejects.toMatchObject({ code });
 });
 
 it('rejects challenge HTML even when FlareSolverr reports HTTP 200', async () => {
   const { host, url } = source();
-  setupRobots();
   vi.mocked(fetch).mockResolvedValueOnce(
     new Response(JSON.stringify(solverResult(url, 200, '<html>Attention Required cf-chl-</html>'))),
   );
@@ -107,7 +102,6 @@ it('rejects challenge HTML even when FlareSolverr reports HTTP 200', async () =>
 it('accepts browser-decoded HTML with replacement characters in site markup', async () => {
   const { host, url } = source();
   const html = '<html><div class="\ufffd">Chapter</div></html>';
-  setupRobots();
   vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(solverResult(url, 200, html))));
   await expect(transport(host)(url)).resolves.toBe(html);
 });
@@ -116,7 +110,6 @@ it.each(['{invalid', JSON.stringify({ status: 'ok' }), JSON.stringify({ unexpect
   'rejects malformed FlareSolverr responses',
   async (body) => {
     const { host, url } = source();
-    setupRobots();
     vi.mocked(fetch).mockResolvedValueOnce(new Response(body));
     await expect(transport(host)(url)).rejects.toMatchObject({ code: 'SOURCE_NETWORK' });
   },
@@ -124,7 +117,6 @@ it.each(['{invalid', JSON.stringify({ status: 'ok' }), JSON.stringify({ unexpect
 
 it('rejects source HTML over the existing chapter size limit', async () => {
   const { host, url } = source();
-  setupRobots();
   vi.mocked(fetch).mockResolvedValueOnce(
     new Response(JSON.stringify(solverResult(url, 200, 'x'.repeat(2 * 1024 * 1024 + 1)))),
   );
@@ -133,32 +125,28 @@ it('rejects source HTML over the existing chapter size limit', async () => {
 
 it('bounds the FlareSolverr JSON body before parsing it', async () => {
   const { host, url } = source();
-  setupRobots();
   vi.mocked(fetch).mockResolvedValueOnce(new Response('x'.repeat(2 * 1024 * 1024 * 6 + 256 * 1024 + 1)));
   await expect(transport(host)(url)).rejects.toMatchObject({ code: 'SOURCE_TOO_LARGE' });
 });
 
 it('rejects private source DNS answers before contacting FlareSolverr', async () => {
   const { host, url } = source();
-  setupRobots();
   dnsState.addresses = [{ address: '127.0.0.1', family: 4 }];
   await expect(transport(host)(url)).rejects.toMatchObject({ code: 'SOURCE_NETWORK' });
-  expect(fetch).toHaveBeenCalledOnce();
+  expect(fetch).not.toHaveBeenCalled();
 });
 
 it('reports a failed FlareSolverr connection without falling back to direct page fetch', async () => {
   const { host, url } = source();
-  setupRobots();
   vi.mocked(fetch).mockRejectedValueOnce(new Error('connection refused'));
   await expect(transport(host)(url)).rejects.toMatchObject({ code: 'SOURCE_NETWORK' });
-  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch).toHaveBeenCalledOnce();
 });
 
 it('propagates cancellation during a FlareSolverr request', async () => {
   const { host, url } = source();
   const controller = new AbortController();
   const reason = new Error('cancelled');
-  setupRobots();
   vi.mocked(fetch).mockImplementationOnce(async () => {
     controller.abort(reason);
     throw reason;
@@ -168,17 +156,9 @@ it('propagates cancellation during a FlareSolverr request', async () => {
 
 it('uses the direct source transport when FlareSolverr is not configured', async () => {
   const { host, url } = source();
-  setupRobots();
   vi.mocked(fetch).mockResolvedValueOnce(new Response('<html>Direct</html>'));
   const fetchHtml = createSourceTransport({ signal: new AbortController().signal, allowedHosts: [host] });
   await expect(fetchHtml(url)).resolves.toBe('<html>Direct</html>');
-  expect(fetch).toHaveBeenCalledTimes(2);
-  expect(String(vi.mocked(fetch).mock.calls[1]![0])).toBe(url);
-});
-
-it('honors robots disallow rules before requesting FlareSolverr', async () => {
-  const { host, url } = source();
-  setupRobots('User-agent: *\nDisallow: /html');
-  await expect(transport(host)(url)).rejects.toMatchObject({ code: 'ROBOTS_DISALLOWED' });
   expect(fetch).toHaveBeenCalledOnce();
+  expect(String(vi.mocked(fetch).mock.calls[0]![0])).toBe(url);
 });

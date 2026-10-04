@@ -5,7 +5,6 @@ import { Agent, fetch, type Response } from 'undici';
 import { SourceError } from './types.js';
 
 const USER_AGENT = 'NovelLibrary/1.0';
-const robotsCache = new Map<string, { expiresAt: number; disallow: string[]; crawlDelayMs: number }>();
 
 export function isPublicAddress(input: string): boolean {
   const address = input.toLowerCase().replace(/^::ffff:/, '');
@@ -89,24 +88,6 @@ export function decodeSourceBytes(buffer: Buffer, contentType: string | null): s
   if (decoded.includes('\ufffd'))
     throw new SourceError('SOURCE_ENCODING', 'Source response contains invalid encoded text');
   return decoded;
-}
-
-function parseRobots(text: string): { disallow: string[]; crawlDelayMs: number } {
-  const disallow: string[] = [];
-  let applies = false;
-  let crawlDelayMs = 0;
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/#.*/, '').trim();
-    const separator = line.indexOf(':');
-    if (separator < 0) continue;
-    const field = line.slice(0, separator).trim().toLowerCase();
-    const value = line.slice(separator + 1).trim();
-    if (field === 'user-agent') applies = value === '*' || value.toLowerCase() === USER_AGENT.toLowerCase();
-    else if (applies && field === 'disallow' && value) disallow.push(value);
-    else if (applies && field === 'crawl-delay')
-      crawlDelayMs = Math.max(crawlDelayMs, Math.ceil(Number(value) * 1000) || 0);
-  }
-  return { disallow, crawlDelayMs };
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
@@ -263,22 +244,6 @@ async function flaresolverrFetch(
   return { html: solution.response, status: solution.status, retryAfter: null };
 }
 
-async function robots(
-  origin: string,
-  signal: AbortSignal,
-  allowedHosts: ReadonlySet<string>,
-): Promise<{ disallow: string[]; crawlDelayMs: number }> {
-  const cached = robotsCache.get(origin);
-  if (cached && cached.expiresAt > Date.now()) return cached;
-  const response = await rawFetch(new URL('/robots.txt', origin), 256 * 1024, signal, allowedHosts);
-  if (response.status === 404) return { disallow: [], crawlDelayMs: 0 };
-  if (response.status >= 400)
-    throw new SourceError('ROBOTS_UNAVAILABLE', `Could not read robots policy (${response.status})`);
-  const parsed = parseRobots(decodeSourceBytes(response.bytes, response.contentType));
-  robotsCache.set(origin, { ...parsed, expiresAt: Date.now() + 3_600_000 });
-  return parsed;
-}
-
 export interface SourceTransportOptions {
   signal: AbortSignal;
   allowedHosts?: readonly string[];
@@ -292,10 +257,7 @@ export function createSourceTransport(options: SourceTransportOptions): (url: st
     const url = new URL(input);
     if (url.protocol !== 'https:' || !allowedHosts.has(url.hostname) || url.port || url.username || url.password)
       throw new SourceError('UNSUPPORTED_URL', 'Source transport rejected the URL');
-    const policy = await robots(url.origin, options.signal, allowedHosts);
-    if (policy.disallow.some((path) => url.pathname.startsWith(path)))
-      throw new SourceError('ROBOTS_DISALLOWED', 'Source path is disallowed by robots policy');
-    await options.beforeRequest?.(Math.max(2000, policy.crawlDelayMs));
+    await options.beforeRequest?.(2000);
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         const limit = /index|list|目录/i.test(url.pathname) ? 8 * 1024 * 1024 : 2 * 1024 * 1024;
