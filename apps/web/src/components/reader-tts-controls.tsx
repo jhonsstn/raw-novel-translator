@@ -2,6 +2,7 @@
 import { Loader2, Pause, Play, Settings2, Square, Volume2 } from 'lucide-react';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { speechSegments, splitForSpeech } from '../lib/tts';
 
 type PlaybackState = 'idle' | 'loading' | 'playing' | 'paused';
 
@@ -37,35 +38,6 @@ function errorMessage(value: unknown, fallback: string): string {
   return error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
     ? error.message
     : fallback;
-}
-
-function splitForSpeech(text: string, maxCharacters = 3900): string[] {
-  if (Array.from(text).length <= maxCharacters) return [text];
-  const sentences = text.match(/[^.!?。！？]+[.!?。！？…]*\s*/g) ?? [text];
-  const chunks: string[] = [];
-  let current = '';
-  const flush = () => {
-    if (current.trim()) chunks.push(current.trim());
-    current = '';
-  };
-  for (const sentence of sentences) {
-    const chars = Array.from(sentence.trim());
-    if (chars.length > maxCharacters) {
-      flush();
-      for (let offset = 0; offset < chars.length; offset += maxCharacters)
-        chunks.push(
-          chars
-            .slice(offset, offset + maxCharacters)
-            .join('')
-            .trim(),
-        );
-      continue;
-    }
-    if (Array.from(current).length + chars.length + 1 > maxCharacters) flush();
-    current = current ? `${current} ${sentence.trim()}` : sentence.trim();
-  }
-  flush();
-  return chunks.filter(Boolean);
 }
 
 export function ReaderTtsControls({ chapterId, language, paragraphs, contentRef, hasNextChapter, onAutoNext }: Props) {
@@ -249,12 +221,9 @@ export function ReaderTtsControls({ chapterId, language, paragraphs, contentRef,
       highlight(startIndex);
       const controller = new AbortController();
       streamAbortRef.current = controller;
-      const segments = paragraphs
-        .slice(startIndex)
-        .flatMap((paragraph, offset) =>
-          splitForSpeech(paragraph).map((text, part) => ({ index: startIndex + offset, part, text })),
-        );
+      const segments = speechSegments(paragraphs, startIndex);
       const finish = () => {
+        if (generation !== generationRef.current) return;
         if (autoNext && hasNextChapter) {
           sessionStorage.setItem('reader-tts-resume', 'true');
           setState('loading');
@@ -265,9 +234,16 @@ export function ReaderTtsControls({ chapterId, language, paragraphs, contentRef,
         setParagraphIndex(null);
         clearHighlight();
       };
+      if (segments.length === 0) {
+        finish();
+        return;
+      }
       const playQueued = async (): Promise<void> => {
-        if (generation !== generationRef.current || audioRef.current || streamQueueRef.current.length === 0) return;
-        if (streamDoneRef.current && streamQueueRef.current.length === 0) return;
+        if (generation !== generationRef.current || audioRef.current) return;
+        if (streamQueueRef.current.length === 0) {
+          if (streamDoneRef.current) finish();
+          return;
+        }
         const segment = streamQueueRef.current.shift();
         if (!segment) return;
         setParagraphIndex(segment.index);
@@ -277,8 +253,7 @@ export function ReaderTtsControls({ chapterId, language, paragraphs, contentRef,
         audio.onended = () => {
           URL.revokeObjectURL(segment.url);
           audioRef.current = null;
-          if (streamDoneRef.current && streamQueueRef.current.length === 0) finish();
-          else void playQueued();
+          void playQueued();
         };
         audio.onerror = () => {
           URL.revokeObjectURL(segment.url);
@@ -346,6 +321,7 @@ export function ReaderTtsControls({ chapterId, language, paragraphs, contentRef,
           }
           if (result.done) break;
         }
+        if (generation !== generationRef.current) return;
         streamDoneRef.current = true;
         void playQueued();
       } catch (cause) {

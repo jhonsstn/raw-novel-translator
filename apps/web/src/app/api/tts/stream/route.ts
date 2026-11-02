@@ -1,13 +1,27 @@
 import { migrate } from '@novel/db';
 import { AppError, createTtsSpeech, sanitizedError } from '@novel/core';
 import { z, ZodError } from 'zod';
+import { hasSpeechText } from '../../../../lib/tts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const schema = z.object({
-  segments: z.array(z.object({ index: z.number().int().min(0), part: z.number().int().min(0), text: z.string().trim().min(1).max(4096) }).strict()).min(1).max(200),
-}).strict();
+const schema = z
+  .object({
+    segments: z
+      .array(
+        z
+          .object({
+            index: z.number().int().min(0),
+            part: z.number().int().min(0),
+            text: z.string().trim().min(1).max(4096),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(200),
+  })
+  .strict();
 
 function requireSameOrigin(request: Request): void {
   const configured = process.env.APP_ORIGIN;
@@ -31,6 +45,7 @@ export async function POST(request: Request): Promise<Response> {
       async start(controller) {
         try {
           for (const segment of body.segments) {
+            if (!hasSpeechText(segment.text)) continue;
             const audio = await createTtsSpeech(segment.text, request.signal);
             controller.enqueue(
               encoder.encode(
@@ -54,11 +69,17 @@ export async function POST(request: Request): Promise<Response> {
         request.signal.throwIfAborted();
       },
     });
-    return new Response(stream, { headers: { 'Cache-Control': 'no-store', Connection: 'keep-alive', 'Content-Type': 'text/event-stream' } });
+    return new Response(stream, {
+      headers: { 'Cache-Control': 'no-store', Connection: 'keep-alive', 'Content-Type': 'text/event-stream' },
+    });
   } catch (error) {
     if (error instanceof ZodError)
-      return Response.json({ error: { code: 'INVALID_BODY', message: error.issues[0]?.message ?? 'Request body is invalid' } }, { status: 400 });
-    if (error instanceof AppError) return Response.json({ error: { code: error.code, message: error.message } }, { status: error.status });
+      return Response.json(
+        { error: { code: 'INVALID_BODY', message: error.issues[0]?.message ?? 'Request body is invalid' } },
+        { status: 400 },
+      );
+    if (error instanceof AppError)
+      return Response.json({ error: { code: error.code, message: error.message } }, { status: error.status });
     return Response.json({ error: { code: 'TTS_STREAM_FAILED', message: sanitizedError(error) } }, { status: 502 });
   }
 }
