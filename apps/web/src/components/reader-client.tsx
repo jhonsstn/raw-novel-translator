@@ -1,5 +1,5 @@
 'use client';
-import { ArrowLeft, ArrowRight, Check, Languages, List, Settings2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, ExternalLink, Languages, List, Settings2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ReaderTtsControls } from './reader-tts-controls';
@@ -11,6 +11,7 @@ interface Chapter {
   title: string;
   sourceTitle: string;
   englishTitle: string | null;
+  canonicalUrl: string;
   sourceParagraphs: string[] | null;
   englishParagraphs: string[] | null;
   translatedModel: string | null;
@@ -288,6 +289,15 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
           <button className={buttonClass} onClick={() => void toggleRead()}>
             <Check size={15} /> {chapter.readAt ? 'Mark unread' : 'Mark read'}
           </button>
+          <a
+            className={`${buttonClass} hover:border-line-strong hover:bg-card-hover`}
+            href={chapter.canonicalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <ExternalLink size={15} aria-hidden="true" /> Original chapter
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
           <button className={buttonClass} onClick={() => adjustFontSize(-1)} aria-label="Decrease font size">
             A−
           </button>
@@ -333,6 +343,16 @@ export function ReaderClient({ chapterId }: { chapterId: string }) {
               >
                 <Check size={16} /> {chapter.readAt ? 'Mark as unread' : 'Mark as read'}
               </button>
+              <a
+                className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2.5 text-sm font-semibold hover:bg-card-hover"
+                href={chapter.canonicalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => readerMenu.current?.removeAttribute('open')}
+              >
+                <ExternalLink size={16} aria-hidden="true" /> Original chapter
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
               <div className="my-1.5 border-t border-line" />
               <div className="flex items-center justify-between gap-3 px-2.5 py-1.5">
                 <span className="text-sm font-semibold">Text size</span>
