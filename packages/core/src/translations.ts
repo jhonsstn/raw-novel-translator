@@ -9,6 +9,7 @@ interface ChapterTranslationRow {
   id: string;
   novel_id: string;
   novel_title: string;
+  ordinal: number;
   title: string;
   paragraphs: string | null;
   source_hash: string | null;
@@ -138,7 +139,7 @@ export async function handleTranslationJob(job: Job, signal: AbortSignal): Promi
   const sqlite = getDatabase().sqlite;
   const chapter = sqlite
     .prepare(
-      'SELECT c.id,c.novel_id,n.title novel_title,c.title,c.paragraphs,c.source_hash FROM chapters c JOIN novels n ON n.id=c.novel_id WHERE c.id=?',
+      'SELECT c.id,c.novel_id,n.title novel_title,c.ordinal,c.title,c.paragraphs,c.source_hash FROM chapters c JOIN novels n ON n.id=c.novel_id WHERE c.id=?',
     )
     .get(chapterId) as ChapterTranslationRow | undefined;
   if (!chapter?.source_hash) throw new AppError('CHAPTER_NOT_DOWNLOADED', 'Chapter has not been downloaded', 409);
@@ -192,6 +193,7 @@ export async function handleTranslationJob(job: Job, signal: AbortSignal): Promi
         timeoutMs: provider.timeoutSeconds * 1000,
         signal,
         novelName: chapter.novel_title,
+        chapterNumber: chapter.ordinal,
       });
       sqlite
         .prepare(
@@ -225,6 +227,7 @@ export async function handleTranslationJob(job: Job, signal: AbortSignal): Promi
       timeoutMs: provider.timeoutSeconds * 1000,
       signal,
       novelName: chapter.novel_title,
+      chapterNumber: chapter.ordinal,
     });
     const translatedTitle = titleResult.paragraphs.join(' ').trim();
     sqlite.transaction(() => {
